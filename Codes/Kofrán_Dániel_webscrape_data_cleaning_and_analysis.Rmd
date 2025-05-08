@@ -1,0 +1,3393 @@
+---
+title: "The impact of managerial change on team performance in top-tier European football"
+author: "Kofrán Dániel"
+date: '2021 11 03 '
+output: html_document
+---
+
+```{r pressure, echo=FALSE}
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(rvest)
+library(xml2)
+library(data.table)
+library(readxl)
+library(readr)
+library(stringr)
+library(lubridate)
+library(zoo)
+library(modelsummary)
+library(purrr)
+library(kableExtra)
+library(plm)
+library(cowplot)
+library(gridExtra)
+library(haven)
+library(stargazer)
+library(car)
+library(huxtable)
+library(estimatr)
+library(lmtest)
+library(fixest)
+library(hrbrthemes)
+```
+
+
+#############################################################################################################                                               #
+
+#                                                            Tökéletes Spanyolország 1:38 forduló
+                                                                          2008/09-2010/11                                                                                                                                              2011/12-2018/19
+
+#                                               ###########################################################################################################
+
+```{r}
+####  2011/12-2018/19
+year_list <- c("08","09","10")
+for (y in year_list) {
+  link_spa <- paste0("https://www.transfermarkt.com/laliga/gesamtspielplan/wettbewerb/ES1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_spa <-  read_html(link_spa)
+
+### date
+  szezon_spa <- 2008                                                    # ez valami futó változó lesz
+  date_spa <- page_spa %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_spa <- date_spa %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_spa <- page_spa %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_spa <- page_spa %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_spa <- page_spa %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_spa <- result_spa %>% strsplit(':')
+
+  home_goals_spa = lapply(result_1_spa, function(l) l[[1]])
+  away_goals_spa = lapply(result_1_spa, function(l) l[[2]])
+  home_goals_spa <- transpose(home_goals_spa)
+  away_goals_spa <- transpose(away_goals_spa)
+### previous position of team in season
+  home_prev_pos_spa <- page_spa %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_spa <- page_spa %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_spa <- str_sub(home_prev_pos_spa,2,nchar(home_prev_pos_spa)-2)
+  away_prev_pos_spa <- str_sub(away_prev_pos_spa,2,nchar(away_prev_pos_spa)-2)
+  
+  meccsek_spa <- data.frame(home_team_spa, away_team_spa, home_goals_spa, away_goals_spa, home_prev_pos_spa, away_prev_pos_spa)
+### remaining    
+  meccsek_data_spa <- meccsek_spa
+  meccsek_data_spa$home_team_spa <- meccsek_data_spa[,1]
+  meccsek_data_spa$away_team_spa <- meccsek_data_spa[,2]
+  meccsek_data_spa$home_goals_spa <- meccsek_data_spa[,3]
+  meccsek_data_spa$away_goals_spa <- meccsek_data_spa[,4]
+  meccsek_data_spa$home_prev_pos_spa <- meccsek_data_spa[,5]
+  meccsek_data_spa$away_prev_pos_spa <- meccsek_data_spa[,6]
+  meccsek_data_spa[,3:4] <- NULL
+
+  meccsek_data_spa$pont_spa <- ifelse(as.numeric(meccsek_data_spa$home_goals_spa)>as.numeric(meccsek_data_spa$away_goals_spa),3,ifelse(as.numeric(meccsek_data_spa$home_goals_spa)==as.numeric(meccsek_data_spa$away_goals_spa),1,0))
+  
+    
+  meccsek_data_spa$rownumber_spa = 1:nrow(meccsek_data_spa)
+  gameno_c_spa <- ceiling(meccsek_data_spa$rownumber_spa/10)
+  meccsek_data_spa$gameno_spa <- gameno_c_spa
+  
+  meccsek_data_spa$season_spa <- y
+  meccsek_data_spa$league <- "SPA"
+  
+  meccsek_data_spa$date_spa <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_spa$date_spa <- ifelse(meccsek_data_spa$gameno_spa== game_number, date_spa[game_number], meccsek_data_spa$date_spa)
+  }
+  meccsek_data_spa$date_spa <- meccsek_data_spa$date_spa %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == "08") {
+  data_spa_2008_10 <- meccsek_data_spa
+  } else {
+  data_spa_2008_10 <- rbind(data_spa_2008_10,meccsek_data_spa)
+  }
+}
+
+
+
+####  2011/12-2018/19
+for (y in 11:18) {
+  link_spa <- paste0("https://www.transfermarkt.com/laliga/gesamtspielplan/wettbewerb/ES1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_spa <-  read_html(link_spa)
+
+### date
+  szezon_spa <- 2008                                                    # ez valami futó változó lesz
+  date_spa <- page_spa %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_spa <- date_spa %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_spa <- page_spa %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_spa <- page_spa %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_spa <- page_spa %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_spa <- result_spa %>% strsplit(':')
+
+  home_goals_spa = lapply(result_1_spa, function(l) l[[1]])
+  away_goals_spa = lapply(result_1_spa, function(l) l[[2]])
+  home_goals_spa <- transpose(home_goals_spa)
+  away_goals_spa <- transpose(away_goals_spa)
+### previous position of team in season
+  home_prev_pos_spa <- page_spa %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_spa <- page_spa %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_spa <- str_sub(home_prev_pos_spa,2,nchar(home_prev_pos_spa)-2)
+  away_prev_pos_spa <- str_sub(away_prev_pos_spa,2,nchar(away_prev_pos_spa)-2)
+  
+  meccsek_spa <- data.frame(home_team_spa, away_team_spa, home_goals_spa, away_goals_spa, home_prev_pos_spa, away_prev_pos_spa)
+### remaining    
+  meccsek_data_spa <- meccsek_spa
+  meccsek_data_spa$home_team_spa <- meccsek_data_spa[,1]
+  meccsek_data_spa$away_team_spa <- meccsek_data_spa[,2]
+  meccsek_data_spa$home_goals_spa <- meccsek_data_spa[,3]
+  meccsek_data_spa$away_goals_spa <- meccsek_data_spa[,4]
+  meccsek_data_spa$home_prev_pos_spa <- meccsek_data_spa[,5]
+  meccsek_data_spa$away_prev_pos_spa <- meccsek_data_spa[,6]
+  meccsek_data_spa[,3:4] <- NULL
+
+  meccsek_data_spa$pont_spa <- ifelse(as.numeric(meccsek_data_spa$home_goals_spa)>as.numeric(meccsek_data_spa$away_goals_spa),3,ifelse(as.numeric(meccsek_data_spa$home_goals_spa)==as.numeric(meccsek_data_spa$away_goals_spa),1,0))
+  
+    
+  meccsek_data_spa$rownumber_spa = 1:nrow(meccsek_data_spa)
+  gameno_c_spa <- ceiling(meccsek_data_spa$rownumber_spa/10)
+  meccsek_data_spa$gameno_spa <- gameno_c_spa
+  
+  meccsek_data_spa$season_spa <- y
+  meccsek_data_spa$league <- "SPA"
+  
+  meccsek_data_spa$date_spa <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_spa$date_spa <- ifelse(meccsek_data_spa$gameno_spa== game_number, date_spa[game_number], meccsek_data_spa$date_spa)
+  }
+  meccsek_data_spa$date_spa <- meccsek_data_spa$date_spa %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == 11) {
+  data_spa_2011_19 <- meccsek_data_spa
+  } else {
+  data_spa_2011_19 <- rbind(data_spa_2011_19,meccsek_data_spa)
+  }
+}
+```
+
+
+
+#############################################################################################################                                               #
+
+#                                                            Tökéletes Franciaország 1:38 forduló
+                                                                          2008/09-2010/11                                                                                                                                              2011/12-2018/19
+
+#                                               ###########################################################################################################
+
+
+
+
+```{r}
+####  2008/09-2010/11
+year_list <- c("08","09","10")
+for (y in year_list) {
+  link_fra <- paste0("https://www.transfermarkt.com/ligue-1/gesamtspielplan/wettbewerb/FR1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_fra <-  read_html(link_fra)
+
+### date
+  szezon_fra <- 2008                                                    # ez valami futó változó lesz
+  date_fra <- page_fra %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_fra <- date_fra %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_fra <- page_fra %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_fra <- page_fra %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_fra <- page_fra %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_fra <- result_fra %>% strsplit(':')
+
+  home_goals_fra = lapply(result_1_fra, function(l) l[[1]])
+  away_goals_fra = lapply(result_1_fra, function(l) l[[2]])
+  home_goals_fra <- transpose(home_goals_fra)
+  away_goals_fra <- transpose(away_goals_fra)
+### previous position of team in season
+  home_prev_pos_fra <- page_fra %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_fra <- page_fra %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_fra <- str_sub(home_prev_pos_fra,2,nchar(home_prev_pos_fra)-2)
+  away_prev_pos_fra <- str_sub(away_prev_pos_fra,2,nchar(away_prev_pos_fra)-2)
+  
+  meccsek_fra <- data.frame(home_team_fra, away_team_fra, home_goals_fra, away_goals_fra, home_prev_pos_fra, away_prev_pos_fra)
+### remaining    
+  meccsek_data_fra <- meccsek_fra
+  meccsek_data_fra$home_team_fra <- meccsek_data_fra[,1]
+  meccsek_data_fra$away_team_fra <- meccsek_data_fra[,2]
+  meccsek_data_fra$home_goals_fra <- meccsek_data_fra[,3]
+  meccsek_data_fra$away_goals_fra <- meccsek_data_fra[,4]
+  meccsek_data_fra$home_prev_pos_fra <- meccsek_data_fra[,5]
+  meccsek_data_fra$away_prev_pos_fra <- meccsek_data_fra[,6]
+  meccsek_data_fra[,3:4] <- NULL
+
+  meccsek_data_fra$pont_fra <- ifelse(as.numeric(meccsek_data_fra$home_goals_fra)>as.numeric(meccsek_data_fra$away_goals_fra),3,ifelse(as.numeric(meccsek_data_fra$home_goals_fra)==as.numeric(meccsek_data_fra$away_goals_fra),1,0))
+  
+    
+  meccsek_data_fra$rownumber_fra = 1:nrow(meccsek_data_fra)
+  gameno_c_fra <- ceiling(meccsek_data_fra$rownumber_fra/10)
+  meccsek_data_fra$gameno_fra <- gameno_c_fra
+  
+  meccsek_data_fra$season_fra <- y
+  meccsek_data_fra$league <- "FRA"
+  
+  meccsek_data_fra$date_fra <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_fra$date_fra <- ifelse(meccsek_data_fra$gameno_fra== game_number, date_fra[game_number], meccsek_data_fra$date_fra)
+  }
+  meccsek_data_fra$date_fra <- meccsek_data_fra$date_fra %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == "08") {
+  data_fra_2008_10 <- meccsek_data_fra
+  } else {
+  data_fra_2008_10 <- rbind(data_fra_2008_10,meccsek_data_fra)
+  }
+}
+
+
+####  2011/12-2018/19
+for (y in 11:18) {
+  link_fra <- paste0("https://www.transfermarkt.com/ligue-1/gesamtspielplan/wettbewerb/FR1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_fra <-  read_html(link_fra)
+
+### date
+  szezon_fra <- 2008                                                    # ez valami futó változó lesz
+  date_fra <- page_fra %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_fra <- date_fra %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_fra <- page_fra %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_fra <- page_fra %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_fra <- page_fra %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_fra <- result_fra %>% strsplit(':')
+
+  home_goals_fra = lapply(result_1_fra, function(l) l[[1]])
+  away_goals_fra = lapply(result_1_fra, function(l) l[[2]])
+  home_goals_fra <- transpose(home_goals_fra)
+  away_goals_fra <- transpose(away_goals_fra)
+### previous position of team in season
+  home_prev_pos_fra <- page_fra %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_fra <- page_fra %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_fra <- str_sub(home_prev_pos_fra,2,nchar(home_prev_pos_fra)-2)
+  away_prev_pos_fra <- str_sub(away_prev_pos_fra,2,nchar(away_prev_pos_fra)-2)
+  
+  meccsek_fra <- data.frame(home_team_fra, away_team_fra, home_goals_fra, away_goals_fra, home_prev_pos_fra, away_prev_pos_fra)
+### remaining    
+  meccsek_data_fra <- meccsek_fra
+  meccsek_data_fra$home_team_fra <- meccsek_data_fra[,1]
+  meccsek_data_fra$away_team_fra <- meccsek_data_fra[,2]
+  meccsek_data_fra$home_goals_fra <- meccsek_data_fra[,3]
+  meccsek_data_fra$away_goals_fra <- meccsek_data_fra[,4]
+  meccsek_data_fra$home_prev_pos_fra <- meccsek_data_fra[,5]
+  meccsek_data_fra$away_prev_pos_fra <- meccsek_data_fra[,6]
+  meccsek_data_fra[,3:4] <- NULL
+
+  meccsek_data_fra$pont_fra <- ifelse(as.numeric(meccsek_data_fra$home_goals_fra)>as.numeric(meccsek_data_fra$away_goals_fra),3,ifelse(as.numeric(meccsek_data_fra$home_goals_fra)==as.numeric(meccsek_data_fra$away_goals_fra),1,0))
+  
+    
+  meccsek_data_fra$rownumber_fra = 1:nrow(meccsek_data_fra)
+  gameno_c_fra <- ceiling(meccsek_data_fra$rownumber_fra/10)
+  meccsek_data_fra$gameno_fra <- gameno_c_fra
+  
+  meccsek_data_fra$season_fra <- y
+  meccsek_data_fra$league <- "FRA"
+  
+  meccsek_data_fra$date_fra <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_fra$date_fra <- ifelse(meccsek_data_fra$gameno_fra== game_number, date_fra[game_number], meccsek_data_fra$date_fra)
+  }
+  meccsek_data_fra$date_fra <- meccsek_data_fra$date_fra %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == 11) {
+  data_fra_2011_19 <- meccsek_data_fra
+  } else {
+  data_fra_2011_19 <- rbind(data_fra_2011_19,meccsek_data_fra)
+  }
+}
+
+```
+
+
+
+
+#############################################################################################################                                               #
+
+#                                                            Tökéletes Olaszország 1:38 forduló
+                                                                          2008/09-2010/11                                                                                                                                              2011/12-2018/19
+
+#                                               ###########################################################################################################
+
+
+
+
+```{r}
+####  2008/09-2010/11 
+year_list <- c("08","09","10")
+for (y in year_list) {
+  link_ita <- paste0("transfermarkt.com/serie-a/gesamtspielplan/wettbewerb/IT1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_ita <-  read_html(link_ita)
+
+### date
+  szezon_ita <- 2008                                                    # ez valami futó változó lesz
+  date_ita <- page_ita %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_ita <- date_ita %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_ita <- page_ita %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_ita <- page_ita %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_ita <- page_ita %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_ita <- result_ita %>% strsplit(':')
+
+  home_goals_ita = lapply(result_1_ita, function(l) l[[1]])
+  away_goals_ita = lapply(result_1_ita, function(l) l[[2]])
+  home_goals_ita <- transpose(home_goals_ita)
+  away_goals_ita <- transpose(away_goals_ita)
+### previous position of team in season
+  home_prev_pos_ita <- page_ita %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_ita <- page_ita %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_ita <- str_sub(home_prev_pos_ita,2,nchar(home_prev_pos_ita)-2)
+  away_prev_pos_ita <- str_sub(away_prev_pos_ita,2,nchar(away_prev_pos_ita)-2)
+  
+  meccsek_ita <- data.frame(home_team_ita, away_team_ita, home_goals_ita, away_goals_ita, home_prev_pos_ita, away_prev_pos_ita)
+### remaining    
+  meccsek_data_ita <- meccsek_ita
+  meccsek_data_ita$home_team_ita <- meccsek_data_ita[,1]
+  meccsek_data_ita$away_team_ita <- meccsek_data_ita[,2]
+  meccsek_data_ita$home_goals_ita <- meccsek_data_ita[,3]
+  meccsek_data_ita$away_goals_ita <- meccsek_data_ita[,4]
+  meccsek_data_ita$home_prev_pos_ita <- meccsek_data_ita[,5]
+  meccsek_data_ita$away_prev_pos_ita <- meccsek_data_ita[,6]
+  meccsek_data_ita[,3:4] <- NULL
+
+  meccsek_data_ita$pont_ita <- ifelse(as.numeric(meccsek_data_ita$home_goals_ita)>as.numeric(meccsek_data_ita$away_goals_ita),3,ifelse(as.numeric(meccsek_data_ita$home_goals_ita)==as.numeric(meccsek_data_ita$away_goals_ita),1,0))
+  
+    
+  meccsek_data_ita$rownumber_ita = 1:nrow(meccsek_data_ita)
+  gameno_c_ita <- ceiling(meccsek_data_ita$rownumber_ita/10)
+  meccsek_data_ita$gameno_ita <- gameno_c_ita
+  
+  meccsek_data_ita$season_ita <- y
+  meccsek_data_ita$league <- "ITA"
+  
+  meccsek_data_ita$date_ita <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_ita$date_ita <- ifelse(meccsek_data_ita$gameno_ita== game_number, date_ita[game_number], meccsek_data_ita$date_ita)
+  }
+  meccsek_data_ita$date_ita <- meccsek_data_ita$date_ita %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == "08") {
+  data_ita_2008_10 <- meccsek_data_ita
+  } else {
+  data_ita_2008_10 <- rbind(data_ita_2008_10,meccsek_data_ita)
+  }
+}
+
+
+
+####  2011/12-2018/19
+for (y in 11:18) {
+  link_ita <- paste0("transfermarkt.com/serie-a/gesamtspielplan/wettbewerb/IT1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_ita <-  read_html(link_ita)
+
+### date
+  szezon_ita <- 2008                                                    # ez valami futó változó lesz
+  date_ita <- page_ita %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_ita <- date_ita %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_ita <- page_ita %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_ita <- page_ita %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_ita <- page_ita %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_ita <- result_ita %>% strsplit(':')
+
+  home_goals_ita = lapply(result_1_ita, function(l) l[[1]])
+  away_goals_ita = lapply(result_1_ita, function(l) l[[2]])
+  home_goals_ita <- transpose(home_goals_ita)
+  away_goals_ita <- transpose(away_goals_ita)
+### previous position of team in season
+  home_prev_pos_ita <- page_ita %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_ita <- page_ita %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_ita <- str_sub(home_prev_pos_ita,2,nchar(home_prev_pos_ita)-2)
+  away_prev_pos_ita <- str_sub(away_prev_pos_ita,2,nchar(away_prev_pos_ita)-2)
+  
+  meccsek_ita <- data.frame(home_team_ita, away_team_ita, home_goals_ita, away_goals_ita, home_prev_pos_ita, away_prev_pos_ita)
+### remaining    
+  meccsek_data_ita <- meccsek_ita
+  meccsek_data_ita$home_team_ita <- meccsek_data_ita[,1]
+  meccsek_data_ita$away_team_ita <- meccsek_data_ita[,2]
+  meccsek_data_ita$home_goals_ita <- meccsek_data_ita[,3]
+  meccsek_data_ita$away_goals_ita <- meccsek_data_ita[,4]
+  meccsek_data_ita$home_prev_pos_ita <- meccsek_data_ita[,5]
+  meccsek_data_ita$away_prev_pos_ita <- meccsek_data_ita[,6]
+  meccsek_data_ita[,3:4] <- NULL
+
+  meccsek_data_ita$pont_ita <- ifelse(as.numeric(meccsek_data_ita$home_goals_ita)>as.numeric(meccsek_data_ita$away_goals_ita),3,ifelse(as.numeric(meccsek_data_ita$home_goals_ita)==as.numeric(meccsek_data_ita$away_goals_ita),1,0))
+  
+    
+  meccsek_data_ita$rownumber_ita = 1:nrow(meccsek_data_ita)
+  gameno_c_ita <- ceiling(meccsek_data_ita$rownumber_ita/10)
+  meccsek_data_ita$gameno_ita <- gameno_c_ita
+  
+  meccsek_data_ita$season_ita <- y
+  meccsek_data_ita$league <- "ITA"
+  
+  meccsek_data_ita$date_ita <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_ita$date_ita <- ifelse(meccsek_data_ita$gameno_ita== game_number, date_ita[game_number], meccsek_data_ita$date_ita)
+  }
+  meccsek_data_ita$date_ita <- meccsek_data_ita$date_ita %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == 11) {
+  data_ita_2011_19 <- meccsek_data_ita
+  } else {
+  data_ita_2011_19 <- rbind(data_ita_2011_19,meccsek_data_ita)
+  }
+}
+
+```
+
+
+
+#############################################################################################################                                               #
+
+#                                                            Tökéletes Németország 1:34 forduló
+                                                                          2008/09-2010/11                                                                                                                                              2011/12-2018/19
+
+#                                               ###########################################################################################################
+
+```{r}
+####  2008/09-2010/11
+year_list <- c("08","09","10")
+for (y in year_list) {
+  link_ger <- paste0("https://www.transfermarkt.com/bundesliga/gesamtspielplan/wettbewerb/L1?saison_id=20",y,"&spieltagVon=1&spieltagBis=34")
+  page_ger <-  read_html(link_ger)
+
+### date
+  szezon_ger <- 2008                                                    # ez valami futó változó lesz
+  date_ger <- page_ger %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_ger <- date_ger %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_ger <- page_ger %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_ger <- page_ger %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_ger <- page_ger %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_ger <- result_ger %>% strsplit(':')
+
+  home_goals_ger = lapply(result_1_ger, function(l) l[[1]])
+  away_goals_ger = lapply(result_1_ger, function(l) l[[2]])
+  home_goals_ger <- transpose(home_goals_ger)
+  away_goals_ger <- transpose(away_goals_ger)
+### previous position of team in season
+  home_prev_pos_ger <- page_ger %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_ger <- page_ger %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_ger <- str_sub(home_prev_pos_ger,2,nchar(home_prev_pos_ger)-2)
+  away_prev_pos_ger <- str_sub(away_prev_pos_ger,2,nchar(away_prev_pos_ger)-2)
+  
+  meccsek_ger <- data.frame(home_team_ger, away_team_ger, home_goals_ger, away_goals_ger, home_prev_pos_ger, away_prev_pos_ger)
+### remaining    
+  meccsek_data_ger <- meccsek_ger
+  meccsek_data_ger$home_team_ger <- meccsek_data_ger[,1]
+  meccsek_data_ger$away_team_ger <- meccsek_data_ger[,2]
+  meccsek_data_ger$home_goals_ger <- meccsek_data_ger[,3]
+  meccsek_data_ger$away_goals_ger <- meccsek_data_ger[,4]
+  meccsek_data_ger$home_prev_pos_ger <- meccsek_data_ger[,5]
+  meccsek_data_ger$away_prev_pos_ger <- meccsek_data_ger[,6]
+  meccsek_data_ger[,3:4] <- NULL
+
+  meccsek_data_ger$pont_ger <- ifelse(as.numeric(meccsek_data_ger$home_goals_ger)>as.numeric(meccsek_data_ger$away_goals_ger),3,ifelse(as.numeric(meccsek_data_ger$home_goals_ger)==as.numeric(meccsek_data_ger$away_goals_ger),1,0))
+  
+    
+  meccsek_data_ger$rownumber_ger = 1:nrow(meccsek_data_ger)
+  gameno_c_ger <- ceiling(meccsek_data_ger$rownumber_ger/9)
+  meccsek_data_ger$gameno_ger <- gameno_c_ger
+  
+  meccsek_data_ger$season_ger <- y
+  meccsek_data_ger$league <- "GER"
+  
+  meccsek_data_ger$date_ger <- "hmm"
+  for (game_number in 1:34) {
+    meccsek_data_ger$date_ger <- ifelse(meccsek_data_ger$gameno_ger== game_number, date_ger[game_number], meccsek_data_ger$date_ger)
+  }
+  meccsek_data_ger$date_ger <- meccsek_data_ger$date_ger %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == "08") {
+  data_ger_2008_10 <- meccsek_data_ger
+  } else {
+  data_ger_2008_10 <- rbind(data_ger_2008_10,meccsek_data_ger)
+  }
+}
+
+
+
+
+####  2011/12-2018/19
+for (y in 11:18) {
+  link_ger <- paste0("https://www.transfermarkt.com/bundesliga/gesamtspielplan/wettbewerb/L1?saison_id=20",y,"&spieltagVon=1&spieltagBis=34")
+  page_ger <-  read_html(link_ger)
+
+### date
+  szezon_ger <- 2008                                                    # ez valami futó változó lesz
+  date_ger <- page_ger %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_ger <- date_ger %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_ger <- page_ger %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_ger <- page_ger %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_ger <- page_ger %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_ger <- result_ger %>% strsplit(':')
+
+  home_goals_ger = lapply(result_1_ger, function(l) l[[1]])
+  away_goals_ger = lapply(result_1_ger, function(l) l[[2]])
+  home_goals_ger <- transpose(home_goals_ger)
+  away_goals_ger <- transpose(away_goals_ger)
+### previous position of team in season
+  home_prev_pos_ger <- page_ger %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_ger <- page_ger %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_ger <- str_sub(home_prev_pos_ger,2,nchar(home_prev_pos_ger)-2)
+  away_prev_pos_ger <- str_sub(away_prev_pos_ger,2,nchar(away_prev_pos_ger)-2)
+  
+  meccsek_ger <- data.frame(home_team_ger, away_team_ger, home_goals_ger, away_goals_ger, home_prev_pos_ger, away_prev_pos_ger)
+### remaining    
+  meccsek_data_ger <- meccsek_ger
+  meccsek_data_ger$home_team_ger <- meccsek_data_ger[,1]
+  meccsek_data_ger$away_team_ger <- meccsek_data_ger[,2]
+  meccsek_data_ger$home_goals_ger <- meccsek_data_ger[,3]
+  meccsek_data_ger$away_goals_ger <- meccsek_data_ger[,4]
+  meccsek_data_ger$home_prev_pos_ger <- meccsek_data_ger[,5]
+  meccsek_data_ger$away_prev_pos_ger <- meccsek_data_ger[,6]
+  meccsek_data_ger[,3:4] <- NULL
+
+  meccsek_data_ger$pont_ger <- ifelse(as.numeric(meccsek_data_ger$home_goals_ger)>as.numeric(meccsek_data_ger$away_goals_ger),3,ifelse(as.numeric(meccsek_data_ger$home_goals_ger)==as.numeric(meccsek_data_ger$away_goals_ger),1,0))
+  
+    
+  meccsek_data_ger$rownumber_ger = 1:nrow(meccsek_data_ger)
+  gameno_c_ger <- ceiling(meccsek_data_ger$rownumber_ger/9)
+  meccsek_data_ger$gameno_ger <- gameno_c_ger
+  
+  meccsek_data_ger$season_ger <- y
+  meccsek_data_ger$league <- "GER"
+  
+  meccsek_data_ger$date_ger <- "hmm"
+  for (game_number in 1:34) {
+    meccsek_data_ger$date_ger <- ifelse(meccsek_data_ger$gameno_ger== game_number, date_ger[game_number], meccsek_data_ger$date_ger)
+  }
+  meccsek_data_ger$date_ger <- meccsek_data_ger$date_ger %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == 11) {
+  data_ger_2011_19 <- meccsek_data_ger
+  } else {
+  data_ger_2011_19 <- rbind(data_ger_2011_19,meccsek_data_ger)
+  }
+}
+
+```
+
+
+
+#############################################################################################################                                               #
+
+#                                                            Tökéletes Anglia 1:38 forduló
+                                                                          2008/09-2010/11                                                                                                                                              2011/12-2018/19
+
+#                                               ###########################################################################################################
+
+
+```{r}
+####  2008/09-2010/11  
+year_list <- c("08","09","10")
+for (y in year_list) {
+  link_eng <- paste0("https://www.transfermarkt.com/premier-league/gesamtspielplan/wettbewerb/GB1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_eng <-  read_html(link_eng)
+
+### date
+  szezon_eng <- 2008                                                    # ez valami futó változó lesz
+  date_eng <- page_eng %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_eng <- date_eng %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_eng <- page_eng %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_eng <- page_eng %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_eng <- page_eng %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_eng <- result_eng %>% strsplit(':')
+
+  home_goals_eng = lapply(result_1_eng, function(l) l[[1]])
+  away_goals_eng = lapply(result_1_eng, function(l) l[[2]])
+  home_goals_eng <- transpose(home_goals_eng)
+  away_goals_eng <- transpose(away_goals_eng)
+### previous position of team in season
+  home_prev_pos_eng <- page_eng %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_eng <- page_eng %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_eng <- str_sub(home_prev_pos_eng,2,nchar(home_prev_pos_eng)-2)
+  away_prev_pos_eng <- str_sub(away_prev_pos_eng,2,nchar(away_prev_pos_eng)-2)
+  
+  meccsek_eng <- data.frame(home_team_eng, away_team_eng, home_goals_eng, away_goals_eng, home_prev_pos_eng, away_prev_pos_eng)
+### remaining    
+  meccsek_data_eng <- meccsek_eng
+  meccsek_data_eng$home_team_eng <- meccsek_data_eng[,1]
+  meccsek_data_eng$away_team_eng <- meccsek_data_eng[,2]
+  meccsek_data_eng$home_goals_eng <- meccsek_data_eng[,3]
+  meccsek_data_eng$away_goals_eng <- meccsek_data_eng[,4]
+  meccsek_data_eng$home_prev_pos_eng <- meccsek_data_eng[,5]
+  meccsek_data_eng$away_prev_pos_eng <- meccsek_data_eng[,6]
+  meccsek_data_eng[,3:4] <- NULL
+
+  meccsek_data_eng$pont_eng <- ifelse(as.numeric(meccsek_data_eng$home_goals_eng)>as.numeric(meccsek_data_eng$away_goals_eng),3,ifelse(as.numeric(meccsek_data_eng$home_goals_eng)==as.numeric(meccsek_data_eng$away_goals_eng),1,0))
+  
+    
+  meccsek_data_eng$rownumber_eng = 1:nrow(meccsek_data_eng)
+  gameno_c_eng <- ceiling(meccsek_data_eng$rownumber_eng/10)
+  meccsek_data_eng$gameno_eng <- gameno_c_eng
+  
+  meccsek_data_eng$season_eng <- y
+  meccsek_data_eng$league <- "ENG"
+  
+  meccsek_data_eng$date_eng <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_eng$date_eng <- ifelse(meccsek_data_eng$gameno_eng== game_number, date_eng[game_number], meccsek_data_eng$date_eng)
+  }
+  meccsek_data_eng$date_eng <- meccsek_data_eng$date_eng %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == "08") {
+  data_eng_2008_10 <- meccsek_data_eng
+  } else {
+  data_eng_2008_10 <- rbind(data_eng_2008_10,meccsek_data_eng)
+  }
+}
+
+
+
+####  2011/12-2018/19
+for (y in 11:18) {
+  link_eng <- paste0("https://www.transfermarkt.com/premier-league/gesamtspielplan/wettbewerb/GB1?saison_id=20",y,"&spieltagVon=1&spieltagBis=38")
+  page_eng <-  read_html(link_eng)
+
+### date
+  szezon_eng <- 2008                                                    # ez valami futó változó lesz
+  date_eng <- page_eng %>% html_nodes("tr:nth-child(2) .hide-for-small a") %>% html_text()
+  date_1_eng <- date_eng %>% parse_date_time( "%m %d %y")
+
+### team
+  home_team_eng <- page_eng %>% html_nodes(".no-border-rechts.hauptlink a") %>% html_text()
+  away_team_eng <- page_eng %>% html_nodes(".no-border-links.hauptlink a") %>% html_text()
+
+### points
+  result_eng <- page_eng %>% html_nodes(".ergebnis-link") %>% html_text()
+  result_1_eng <- result_eng %>% strsplit(':')
+
+  home_goals_eng = lapply(result_1_eng, function(l) l[[1]])
+  away_goals_eng = lapply(result_1_eng, function(l) l[[2]])
+  home_goals_eng <- transpose(home_goals_eng)
+  away_goals_eng <- transpose(away_goals_eng)
+### previous position of team in season
+  home_prev_pos_eng <- page_eng %>% html_nodes(".no-border-rechts .tabellenplatz") %>% html_text()
+  away_prev_pos_eng <- page_eng %>% html_nodes(".no-border-links .tabellenplatz") %>% html_text()
+   
+  home_prev_pos_eng <- str_sub(home_prev_pos_eng,2,nchar(home_prev_pos_eng)-2)
+  away_prev_pos_eng <- str_sub(away_prev_pos_eng,2,nchar(away_prev_pos_eng)-2)
+  
+  meccsek_eng <- data.frame(home_team_eng, away_team_eng, home_goals_eng, away_goals_eng, home_prev_pos_eng, away_prev_pos_eng)
+### remaining    
+  meccsek_data_eng <- meccsek_eng
+  meccsek_data_eng$home_team_eng <- meccsek_data_eng[,1]
+  meccsek_data_eng$away_team_eng <- meccsek_data_eng[,2]
+  meccsek_data_eng$home_goals_eng <- meccsek_data_eng[,3]
+  meccsek_data_eng$away_goals_eng <- meccsek_data_eng[,4]
+  meccsek_data_eng$home_prev_pos_eng <- meccsek_data_eng[,5]
+  meccsek_data_eng$away_prev_pos_eng <- meccsek_data_eng[,6]
+  meccsek_data_eng[,3:4] <- NULL
+
+  meccsek_data_eng$pont_eng <- ifelse(as.numeric(meccsek_data_eng$home_goals_eng)>as.numeric(meccsek_data_eng$away_goals_eng),3,ifelse(as.numeric(meccsek_data_eng$home_goals_eng)==as.numeric(meccsek_data_eng$away_goals_eng),1,0))
+  
+    
+  meccsek_data_eng$rownumber_eng = 1:nrow(meccsek_data_eng)
+  gameno_c_eng <- ceiling(meccsek_data_eng$rownumber_eng/10)
+  meccsek_data_eng$gameno_eng <- gameno_c_eng
+  
+  meccsek_data_eng$season_eng <- y
+  meccsek_data_eng$league <- "ENG"
+  
+  meccsek_data_eng$date_eng <- "hmm"
+  for (game_number in 1:38) {
+    meccsek_data_eng$date_eng <- ifelse(meccsek_data_eng$gameno_eng== game_number, date_eng[game_number], meccsek_data_eng$date_eng)
+  }
+  meccsek_data_eng$date_eng <- meccsek_data_eng$date_eng %>% parse_date_time( "%m %d %y")
+  
+  
+  
+  if (y == 11) {
+  data_eng_2011_19 <- meccsek_data_eng
+  } else {
+  data_eng_2011_19 <- rbind(data_eng_2011_19,meccsek_data_eng)
+  }
+}
+```
+
+
+
+
+######################################################    Adatok összekapcsolása ligánként, kimentése
+
+
+```{r}
+## colnameket egységesíteni kell
+data_eng_full <- rbind(data_eng_2008_10,data_eng_2011_19)
+data_spa_full <- rbind(data_spa_2008_10,data_spa_2011_19)
+data_ita_full <- rbind(data_ita_2008_10,data_ita_2011_19)
+data_ger_full <- rbind(data_ger_2008_10,data_ger_2011_19)
+data_fra_full <- rbind(data_fra_2008_10,data_fra_2011_19)
+```
+
+
+```{r}
+write.csv(data_eng_full, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_eng_full.csv", row.names = FALSE)
+write.csv(data_spa_full, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_spa_full.csv", row.names = FALSE)
+write.csv(data_ita_full, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ita_full.csv", row.names = FALSE)
+write.csv(data_ger_full, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ger_full.csv", row.names = FALSE)
+write.csv(data_fra_full, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_fra_full.csv", row.names = FALSE)
+```
+
+
+```{r}
+data_eng_full_2 <- read_delim("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_eng_full.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE, id = NULL)
+data_spa_full_2 <- read_delim("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_spa_full.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE, id = NULL)
+data_ita_full_2 <- read_delim("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ita_full.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE, id = NULL)
+data_ger_full_2 <- read_delim("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ger_full.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE, id = NULL)
+data_fra_full_2 <- read_delim("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_fra_full.csv", delim = ",", escape_double = FALSE, trim_ws = TRUE, id = NULL)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################                    ######################     Anglia rendes     ######################                    ######################
+
+```{r}
+match_data_eng_proba <- data_eng_full_2
+colnames(match_data_eng_proba)
+
+
+
+### general stats
+match_data_eng_proba_2 <- data.frame(match_data_eng_proba$rownumber_eng)
+match_data_eng_proba_2$league <- match_data_eng_proba$league
+match_data_eng_proba_2[1] <- NULL
+match_data_eng_proba_2$season <- match_data_eng_proba$season_eng
+match_data_eng_proba_2$date <- match_data_eng_proba$date_eng
+match_data_eng_proba_2$team <- match_data_eng_proba$home_team_eng
+match_data_eng_proba_2$gameno <- match_data_eng_proba$gameno_eng
+
+
+match_data_eng_proba$home <- 1
+
+
+
+### home stats
+match_data_eng_proba_2$home <- match_data_eng_proba$home
+match_data_eng_proba_2$points <- match_data_eng_proba$pont_eng
+match_data_eng_proba_2$goals <- match_data_eng_proba$home_goals_eng
+match_data_eng_proba_2$prev_pos <- match_data_eng_proba$home_prev_pos_eng
+
+
+
+### opponent stats
+match_data_eng_proba_2$team_opponent <- match_data_eng_proba$away_team_eng
+
+
+match_data_eng_proba$away_pont_eng <- ifelse(as.numeric(match_data_eng_proba$home_goals_eng)<as.numeric(match_data_eng_proba$away_goals_eng),3,ifelse(as.numeric(match_data_eng_proba$home_goals_eng)==as.numeric(match_data_eng_proba$away_goals_eng),1,0))
+
+
+match_data_eng_proba_2$points_opponent <- match_data_eng_proba$away_pont_eng
+match_data_eng_proba_2$goals_opponent <- match_data_eng_proba$away_goals_eng
+match_data_eng_proba_2$prev_pos_opponent <- match_data_eng_proba$away_prev_pos_eng
+
+
+colnames(match_data_eng_proba_2)
+```
+
+#                                     ################################ Anglia away ################################
+
+```{r}
+data_eng_away_teams <- match_data_eng_proba_2
+colnames(data_eng_away_teams)
+data_eng_away_teams <- data_eng_away_teams %>%
+  rename(team_opponent = team,
+         team = team_opponent,
+         
+         points_opponent = points,
+         points = points_opponent,
+         
+         goals_opponent = goals,
+         goals = goals_opponent,
+         
+         prev_pos_opponent = prev_pos,
+         prev_pos = prev_pos_opponent)
+
+print("első csere")
+colnames(data_eng_away_teams)
+
+data_eng_away_teams$home <- 0
+
+print("végső csere")
+colnames(data_eng_away_teams)
+
+data_eng_final <- rbind(match_data_eng_proba_2,data_eng_away_teams)
+
+```
+
+
+
+######################                    ######################     Spanyolország rendes     ######################                    ######################
+
+```{r}
+match_data_spa_proba <- data_spa_full_2
+colnames(match_data_spa_proba)
+
+
+
+### general stats
+match_data_spa_proba_2 <- data.frame(match_data_spa_proba$rownumber_spa)
+match_data_spa_proba_2$league <- match_data_spa_proba$league
+match_data_spa_proba_2[1] <- NULL
+match_data_spa_proba_2$season <- match_data_spa_proba$season_spa
+match_data_spa_proba_2$date <- match_data_spa_proba$date_spa
+match_data_spa_proba_2$team <- match_data_spa_proba$home_team_spa
+match_data_spa_proba_2$gameno <- match_data_spa_proba$gameno_spa
+
+
+match_data_spa_proba$home <- 1
+
+
+
+### home stats
+match_data_spa_proba_2$home <- match_data_spa_proba$home
+match_data_spa_proba_2$points <- match_data_spa_proba$pont_spa
+match_data_spa_proba_2$goals <- match_data_spa_proba$home_goals_spa
+match_data_spa_proba_2$prev_pos <- match_data_spa_proba$home_prev_pos_spa
+
+
+
+### opponent stats
+match_data_spa_proba_2$team_opponent <- match_data_spa_proba$away_team_spa
+
+
+match_data_spa_proba$away_pont_spa <- ifelse(as.numeric(match_data_spa_proba$home_goals_spa)<as.numeric(match_data_spa_proba$away_goals_spa),3,ifelse(as.numeric(match_data_spa_proba$home_goals_spa)==as.numeric(match_data_spa_proba$away_goals_spa),1,0))
+
+
+match_data_spa_proba_2$points_opponent <- match_data_spa_proba$away_pont_spa
+match_data_spa_proba_2$goals_opponent <- match_data_spa_proba$away_goals_spa
+match_data_spa_proba_2$prev_pos_opponent <- match_data_spa_proba$away_prev_pos_spa
+
+
+colnames(match_data_spa_proba_2)
+```
+
+#                                     ################################ Spanyolország away ################################
+
+```{r}
+data_spa_away_teams <- match_data_spa_proba_2
+colnames(data_spa_away_teams)
+data_spa_away_teams <- data_spa_away_teams %>%
+  rename(team_opponent = team,
+         team = team_opponent,
+         
+         points_opponent = points,
+         points = points_opponent,
+         
+         goals_opponent = goals,
+         goals = goals_opponent,
+         
+         prev_pos_opponent = prev_pos,
+         prev_pos = prev_pos_opponent)
+
+print("első csere")
+colnames(data_spa_away_teams)
+
+data_spa_away_teams$home <- 0
+
+print("végső csere")
+colnames(data_spa_away_teams)
+
+data_spa_final <- rbind(match_data_spa_proba_2,data_spa_away_teams)
+
+```
+
+
+
+
+######################                    ######################     Olaszország rendes     ######################                    ######################
+
+```{r}
+match_data_ita_proba <- data_ita_full_2
+colnames(match_data_ita_proba)
+
+
+
+### general stats
+match_data_ita_proba_2 <- data.frame(match_data_ita_proba$rownumber_ita)
+match_data_ita_proba_2$league <- "ITA"
+match_data_ita_proba_2[1] <- NULL
+match_data_ita_proba_2$season <- match_data_ita_proba$season_ita
+match_data_ita_proba_2$date <- match_data_ita_proba$date_ita
+match_data_ita_proba_2$team <- match_data_ita_proba$home_team_ita
+match_data_ita_proba_2$gameno <- match_data_ita_proba$gameno_ita
+
+
+match_data_ita_proba$home <- 1
+
+
+
+### home stats
+match_data_ita_proba_2$home <- match_data_ita_proba$home
+match_data_ita_proba_2$points <- match_data_ita_proba$pont_ita
+match_data_ita_proba_2$goals <- match_data_ita_proba$home_goals_ita
+match_data_ita_proba_2$prev_pos <- match_data_ita_proba$home_prev_pos_ita
+
+
+
+### opponent stats
+match_data_ita_proba_2$team_opponent <- match_data_ita_proba$away_team_ita
+
+
+match_data_ita_proba$away_pont_ita <- ifelse(as.numeric(match_data_ita_proba$home_goals_ita)<as.numeric(match_data_ita_proba$away_goals_ita),3,ifelse(as.numeric(match_data_ita_proba$home_goals_ita)==as.numeric(match_data_ita_proba$away_goals_ita),1,0))
+
+
+match_data_ita_proba_2$points_opponent <- match_data_ita_proba$away_pont_ita
+match_data_ita_proba_2$goals_opponent <- match_data_ita_proba$away_goals_ita
+match_data_ita_proba_2$prev_pos_opponent <- match_data_ita_proba$away_prev_pos_ita
+
+
+colnames(match_data_ita_proba_2)
+```
+
+#                                     ################################ Olaszország away ################################
+
+```{r}
+data_ita_away_teams <- match_data_ita_proba_2
+colnames(data_ita_away_teams)
+data_ita_away_teams <- data_ita_away_teams %>%
+  rename(team_opponent = team,
+         team = team_opponent,
+         
+         points_opponent = points,
+         points = points_opponent,
+         
+         goals_opponent = goals,
+         goals = goals_opponent,
+         
+         prev_pos_opponent = prev_pos,
+         prev_pos = prev_pos_opponent)
+
+print("első csere")
+colnames(data_ita_away_teams)
+
+data_ita_away_teams$home <- 0
+
+print("végső csere")
+colnames(data_ita_away_teams)
+
+data_ita_final <- rbind(match_data_ita_proba_2,data_ita_away_teams)
+
+```
+
+
+
+
+
+
+
+######################                    ######################     Németország rendes     ######################                    ######################
+
+```{r}
+match_data_ger_proba <- data_ger_full_2
+colnames(match_data_ger_proba)
+
+
+
+### general stats
+match_data_ger_proba_2 <- data.frame(match_data_ger_proba$rownumber_ger)
+match_data_ger_proba_2$league <- match_data_ger_proba$league
+match_data_ger_proba_2[1] <- NULL
+match_data_ger_proba_2$season <- match_data_ger_proba$season_ger
+match_data_ger_proba_2$date <- match_data_ger_proba$date_ger
+match_data_ger_proba_2$team <- match_data_ger_proba$home_team_ger
+match_data_ger_proba_2$gameno <- match_data_ger_proba$gameno_ger
+
+
+match_data_ger_proba$home <- 1
+
+
+
+### home stats
+match_data_ger_proba_2$home <- match_data_ger_proba$home
+match_data_ger_proba_2$points <- match_data_ger_proba$pont_ger
+match_data_ger_proba_2$goals <- match_data_ger_proba$home_goals_ger
+match_data_ger_proba_2$prev_pos <- match_data_ger_proba$home_prev_pos_ger
+
+
+
+### opponent stats
+match_data_ger_proba_2$team_opponent <- match_data_ger_proba$away_team_ger
+
+
+match_data_ger_proba$away_pont_ger <- ifelse(as.numeric(match_data_ger_proba$home_goals_ger)<as.numeric(match_data_ger_proba$away_goals_ger),3,ifelse(as.numeric(match_data_ger_proba$home_goals_ger)==as.numeric(match_data_ger_proba$away_goals_ger),1,0))
+
+
+match_data_ger_proba_2$points_opponent <- match_data_ger_proba$away_pont_ger
+match_data_ger_proba_2$goals_opponent <- match_data_ger_proba$away_goals_ger
+match_data_ger_proba_2$prev_pos_opponent <- match_data_ger_proba$away_prev_pos_ger
+
+
+colnames(match_data_ger_proba_2)
+```
+
+#                                     ################################ Németország away ################################
+
+```{r}
+data_ger_away_teams <- match_data_ger_proba_2
+colnames(data_ger_away_teams)
+data_ger_away_teams <- data_ger_away_teams %>%
+  rename(team_opponent = team,
+         team = team_opponent,
+         
+         points_opponent = points,
+         points = points_opponent,
+         
+         goals_opponent = goals,
+         goals = goals_opponent,
+         
+         prev_pos_opponent = prev_pos,
+         prev_pos = prev_pos_opponent)
+
+print("első csere")
+colnames(data_ger_away_teams)
+
+data_ger_away_teams$home <- 0
+
+print("végső csere")
+colnames(data_ger_away_teams)
+
+data_ger_final <- rbind(match_data_ger_proba_2,data_ger_away_teams)
+
+```
+
+
+
+
+
+
+
+######################                    ######################     Franciaország rendes     ######################                    ######################
+
+```{r}
+match_data_fra_proba <- data_fra_full_2
+colnames(match_data_fra_proba)
+
+
+
+### general stats
+match_data_fra_proba_2 <- data.frame(match_data_fra_proba$rownumber_fra)
+match_data_fra_proba_2$league <- "FRA"
+match_data_fra_proba_2[1] <- NULL
+match_data_fra_proba_2$season <- match_data_fra_proba$season_fra
+match_data_fra_proba_2$date <- match_data_fra_proba$date_fra
+match_data_fra_proba_2$team <- match_data_fra_proba$home_team_fra
+match_data_fra_proba_2$gameno <- match_data_fra_proba$gameno_fra
+
+
+match_data_fra_proba$home <- 1
+
+
+
+### home stats
+match_data_fra_proba_2$home <- match_data_fra_proba$home
+match_data_fra_proba_2$points <- match_data_fra_proba$pont_fra
+match_data_fra_proba_2$goals <- match_data_fra_proba$home_goals_fra
+match_data_fra_proba_2$prev_pos <- match_data_fra_proba$home_prev_pos_fra
+
+
+
+### opponent stats
+match_data_fra_proba_2$team_opponent <- match_data_fra_proba$away_team_fra
+
+
+match_data_fra_proba$away_pont_fra <- ifelse(as.numeric(match_data_fra_proba$home_goals_fra)<as.numeric(match_data_fra_proba$away_goals_fra),3,ifelse(as.numeric(match_data_fra_proba$home_goals_fra)==as.numeric(match_data_fra_proba$away_goals_fra),1,0))
+
+
+match_data_fra_proba_2$points_opponent <- match_data_fra_proba$away_pont_fra
+match_data_fra_proba_2$goals_opponent <- match_data_fra_proba$away_goals_fra
+match_data_fra_proba_2$prev_pos_opponent <- match_data_fra_proba$away_prev_pos_fra
+
+
+colnames(match_data_fra_proba_2)
+```
+
+#                                     ################################ Franciaország away ################################
+
+```{r}
+data_fra_away_teams <- match_data_fra_proba_2
+colnames(data_fra_away_teams)
+data_fra_away_teams <- data_fra_away_teams %>%
+  rename(team_opponent = team,
+         team = team_opponent,
+         
+         points_opponent = points,
+         points = points_opponent,
+         
+         goals_opponent = goals,
+         goals = goals_opponent,
+         
+         prev_pos_opponent = prev_pos,
+         prev_pos = prev_pos_opponent)
+
+print("első csere")
+colnames(data_fra_away_teams)
+
+data_fra_away_teams$home <- 0
+
+print("végső csere")
+colnames(data_fra_away_teams)
+
+data_fra_final <- rbind(match_data_fra_proba_2,data_fra_away_teams)
+
+```
+
+
+```{r}
+write.csv(data_eng_final, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_eng_final.csv", row.names = FALSE)
+write.csv(data_spa_final, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_spa_final.csv", row.names = FALSE)
+write.csv(data_ita_final, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ita_final.csv", row.names = FALSE)
+write.csv(data_ger_final, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ger_final.csv", row.names = FALSE)
+write.csv(data_fra_final, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_fra_final.csv", row.names = FALSE)
+```
+
+
+################################ Tisztítás ENG
+
+
+# 1. Nyers adatból men_dat_1 (később:erk_men_dat) és men_dat_2 (később:tav_men_dat)létrehozása
+
+## Nyers adat behívása
+
+```{r}
+men_valtasok <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/manager/football_managers_workfile.csv")
+data_eng_final <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_eng_final.csv")
+
+
+men_valtasok <- men_valtasok%>%
+  select(date, team, manager_name)
+
+eng_proba <- left_join(data_eng_final,men_valtasok, by = c("team", "date"))
+```
+
+```{r}
+write.csv(eng_proba,'C:/Rajk_Prog_II/ML_nagyprojekt_2022/ml_projekt_eng.csv')
+```
+
+```{r}
+csonka_eng <- eng_proba[complete.cases(eng_proba), ]
+```
+
+```{r}
+csonka_eng <- csonka_eng %>%                                        
+  group_by(manager_name) %>%
+  mutate(men_id = cur_group_id())
+```
+
+```{r}
+write.csv(csonka_eng,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_eng_better.csv')
+```
+
+
+################################ Tisztítás SPA
+
+
+# 1. Nyers adatból men_dat_1 (később:erk_men_dat) és men_dat_2 (később:tav_men_dat)létrehozása
+
+## Nyers adat behívása
+
+```{r}
+men_valtasok <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/manager/man_clean_spa.xlsx")
+```
+
+## Adattisztítás
+
+```{r 1. adattiszt}
+
+#Speciális karakterek eltávolítása
+men_valtasokm <- gsub("[[:punct:]]", "", men_valtasok$`Outgoing manager`) 
+men_valtasokm1 <- gsub("[[:punct:]]", "", men_valtasok$`Replaced by`) 
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = men_valtasokm,erk_edzo = men_valtasokm1)
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = gsub("[0-9]","",men_valtasok$tav_edzo)) %>% mutate(erk_edzo = gsub("[0-9]","",men_valtasok$erk_edzo))
+
+men_valtasok <- men_valtasok %>% dplyr::select(-`Outgoing manager`,-`Replaced by`)
+
+men_valtasok <- men_valtasok %>%
+  rename(date_of_change = `Date of vacancy...4`,
+         date_of_change_2 = `Date of vacancy...6`,
+         manner = `Manner of departure`)
+colnames(men_valtasok)
+```
+
+```{r}
+men_valtasok$date_of_change <- gsub("\\s*\\[[^\\)]+\\]","",as.character(men_valtasok$date_of_change))
+men_valtasok$date_of_change <- men_valtasok$date_of_change %>% parse_date_time( "%d %B %Y")
+men_valtasok <- na.locf(na.locf(men_valtasok),fromLast=TRUE)
+sum(is.na(men_valtasok))
+```
+
+```{r}
+men_valtasok_team <- men_valtasok
+men_valtasok_team <- men_valtasok_team[order(as.Date(men_valtasok_team$date_of_change, format="%Y-%m-%d")),]
+
+men_valtasok_team <- 
+    men_valtasok_team %>%
+    group_by(Team) %>%
+    mutate(prev_date_of_change = dplyr::lag(date_of_change, n = 1, default = NA))
+
+
+
+tav_tavozas_y <- format(men_valtasok_team$date_of_change, format = "%Y")
+tav_tavozas_y <- array(unlist(tav_tavozas_y))
+men_valtasok_team$tav_tavozas_y <- tav_tavozas_y
+
+men_valtasok_team$no_change <- "hmm"
+for (i in men_valtasok_team$prev_date_of_change) {
+  if (is.na(i)){
+    men_valtasok_team$no_change = paste0(men_valtasok_team$tav_tavozas_y,"/06/30")
+  }
+}
+men_valtasok_team$no_change <- as.Date(men_valtasok_team$no_change, "%Y/%m/%d")
+
+
+men_valtasok_team$date_is_lower <- men_valtasok_team$date_of_change < men_valtasok_team$no_change
+
+```
+
+```{r}
+men_valtasok_team$tav_tavozas_y_kisebb <- men_valtasok_team$tav_tavozas_y
+men_valtasok_team <- men_valtasok_team %>% 
+  mutate(tav_tavozas_y_kisebb = if_else(date_of_change < no_change, as.numeric(tav_tavozas_y) - 1, as.numeric(tav_tavozas_y)))
+men_valtasok_team$date_kisebb <- paste0(men_valtasok_team$tav_tavozas_y_kisebb,"/06/30")
+men_valtasok_team$date_kisebb <- as.Date(men_valtasok_team$date_kisebb, "%Y/%m/%d")
+
+men_valtasok_team$prev_date_of_change_2 <- ifelse(is.na(men_valtasok_team$prev_date_of_change), men_valtasok_team$date_kisebb, NA)
+men_valtasok_team$prev_date_of_change_3 <- as.Date(men_valtasok_team$prev_date_of_change_2)
+
+men_valtasok_team$prev_date_of_change_4 <-  coalesce(men_valtasok_team$prev_date_of_change,men_valtasok_team$prev_date_of_change_3) 
+
+#view(men_valtasok_team)
+```
+
+##### tiszta adat létrehozása
+
+```{r}
+finmen <- men_valtasok_team
+
+finmen$prev_date_of_change <- finmen$prev_date_of_change_4
+finmen$date_of_change_2 <- NULL
+finmen[7:14]<- NULL
+finmen$from <- finmen$prev_date_of_change
+finmen$to <- finmen$date_of_change
+finmen$days_in_charge <- (finmen$to - finmen$from)/(60*60*24)
+```
+
+##### Összekapcsolás előkészítése
+
+```{r}
+good_man <- finmen
+
+good_man$date_of_change <- NULL
+good_man$erk_edzo <- NULL
+good_man$prev_date_of_change <- NULL
+good_man$days_in_charge <- NULL
+
+head(good_man)
+```
+
+```{r}
+data_spa_final <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_spa_final.csv")
+```
+
+```{r}
+head(data_spa_final)
+```
+
+# Összekapcsolás, 1. kísérlet
+
+```{r}
+data_man_match_spa <- fuzzy_left_join(data_spa_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_spa <- data_man_match_spa %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_spa))
+```
+
+```{r}
+isnochange <- c("CD Tenerife","Elche CF","Recr. Huelva")
+```
+
+```{r}
+match_team<- unique(data_man_match_spa$team)
+match_team <- match_team[order(match_team)]
+match_team
+```
+
+```{r}
+man_team<- unique(good_man$Team)
+man_team <- man_team[order(man_team)]
+man_team
+```
+
+```{r}
+data_spa_final$team <- gsub("Alav<e9>s", "Alavés", data_spa_final$team)
+data_spa_final$team <- gsub("Atl<e9>tico Madrid", "Atlético Madrid", data_spa_final$team)
+
+data_spa_final$team <- gsub("Athletic", "Athletic Bilbao", data_spa_final$team)
+data_spa_final$team <- gsub("C<f3>rdoba CF", "Córdoba", data_spa_final$team)
+data_spa_final$team <- gsub("CA Osasuna", "Osasuna", data_spa_final$team)
+data_spa_final$team <- gsub("CD Legan<e9>s", "Leganés", data_spa_final$team)
+data_spa_final$team <- gsub("CD Numancia", "Numancia", data_spa_final$team)
+data_spa_final$team <- gsub("Celta de Vigo", "Celta Vigo", data_spa_final$team)
+data_spa_final$team <- gsub("Dep. La Coruna", "Deportivo La Coruña", data_spa_final$team)
+
+data_spa_final$team <- gsub("Granada CF", "Granada", data_spa_final$team)
+data_spa_final$team <- gsub("H<e9>rcules CF", "Hércules", data_spa_final$team)
+data_spa_final$team <- gsub("M<e1>laga CF", "Málaga", data_spa_final$team)
+data_spa_final$team <- gsub("RCD Mallorca", "Mallorca", data_spa_final$team)
+data_spa_final$team <- gsub("Real Valladolid", "Valladolid", data_spa_final$team)
+data_spa_final$team <- gsub("Real Zaragoza", " Zaragoza", data_spa_final$team)
+
+data_spa_final$team <- gsub("SD Eibar", "Eibar", data_spa_final$team)
+data_spa_final$team <- gsub("SD Huesca", "Huesca", data_spa_final$team)
+data_spa_final$team <- gsub("Sevilla FC", "Sevilla", data_spa_final$team)
+data_spa_final$team <- gsub("Sporting Gij<f3>n", "Sporting de Gijón", data_spa_final$team)
+data_spa_final$team <- gsub("UD Almer<ed>a", "Almería", data_spa_final$team)
+
+data_spa_final$team <- gsub("UD Las Palmas", "Las Palmas", data_spa_final$team)
+data_spa_final$team <- gsub("Xerez CD", "Xerez", data_spa_final$team)
+data_spa_final$team <- gsub("Racing", "Racing Santander", data_spa_final$team)
+data_spa_final$team <- gsub("Recr. Huelva", "Recreativo", data_spa_final$team)
+
+data_spa_final$team <- gsub("Celta de Vigo", "Celta Vigo", data_spa_final$team)
+data_spa_final$team <- gsub("Sporting de Gijón", "Sporting Gijón", data_spa_final$team)
+
+```
+
+# Összekapcsolás, 2. kísérlet
+
+```{r}
+data_man_match_spa <- fuzzy_left_join(data_spa_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_spa <- data_man_match_spa %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_spa))
+```
+
+```{r eval = F}
+validity_spa <- data_man_match_spa 
+validity_spa[1:2] <- NULL
+validity_spa[3:11]<- NULL
+view(validity_spa)
+
+validity_spa <- validity_spa[order(as.Date(validity_spa$date, format="%Y-%m-%d")),decreasing = T]
+validity_spa <- validity_spa[order(validity_spa$team),decreasing = T]
+view(validity_spa)
+
+
+#validity_spa$tav_edzo <- na.locf(na.locf(validity_spa$tav_edzo),fromLast=TRUE)
+validity_spa$input_edz<-validity_spa$tav_edzo[match(validity_spa$tav_edzo,validity_spa$tav_edzo)]
+
+validity_spa <- validity_spa[order(as.Date(validity_spa$date, format="%Y-%m-%d")),decreasing = F]
+
+view(validity_spa)
+```
+
+```{r}
+csonka_spa <- data_man_match_spa[complete.cases(data_man_match_spa), ]
+csonka_spa$manager_name <- csonka_spa$tav_edzo
+csonka_spa$Team <- NULL
+csonka_spa$to <- NULL
+csonka_spa$from <- NULL
+csonka_spa$tav_edzo <- NULL
+csonka_spa <- csonka_spa %>%                                        
+  group_by(manager_name) %>%
+  mutate(men_id = cur_group_id())
+```
+
+```{r}
+write.csv(csonka_spa,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_spa_better.csv')
+```
+
+
+################################ Tisztítás ITA
+
+
+# 1. Nyers adatból men_dat_1 (később:erk_men_dat) és men_dat_2 (később:tav_men_dat)létrehozása
+
+## Nyers adat behívása
+
+```{r}
+men_valtasok <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/manager/man_clean_ita.xlsx")
+```
+
+## Adattisztítás
+
+```{r 1. adattiszt}
+
+#Speciális karakterek eltávolítása
+men_valtasokm <- gsub("[[:punct:]]", "", men_valtasok$`Outgoing manager`) 
+men_valtasokm1 <- gsub("[[:punct:]]", "", men_valtasok$`Replaced by`) 
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = men_valtasokm,erk_edzo = men_valtasokm1)
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = gsub("[0-9]","",men_valtasok$tav_edzo)) %>% mutate(erk_edzo = gsub("[0-9]","",men_valtasok$erk_edzo))
+
+men_valtasok <- men_valtasok %>% dplyr::select(-`Outgoing manager`,-`Replaced by`)
+
+men_valtasok <- men_valtasok %>%
+  rename(date_of_change = `Date of vacancy...4`,
+         date_of_change_2 = `Date of vacancy...6`,
+         manner = `Manner of departure`)
+colnames(men_valtasok)
+```
+
+```{r}
+men_valtasok$date_of_change <- gsub("\\s*\\[[^\\)]+\\]","",as.character(men_valtasok$date_of_change))
+men_valtasok$date_of_change <- men_valtasok$date_of_change %>% parse_date_time( "%d %B %Y")
+men_valtasok <- na.locf(na.locf(men_valtasok),fromLast=TRUE)
+sum(is.na(men_valtasok))
+```
+
+```{r}
+men_valtasok_team <- men_valtasok
+men_valtasok_team <- men_valtasok_team[order(as.Date(men_valtasok_team$date_of_change, format="%Y-%m-%d")),]
+
+men_valtasok_team <- 
+    men_valtasok_team %>%
+    group_by(Team) %>%
+    mutate(prev_date_of_change = dplyr::lag(date_of_change, n = 1, default = NA))
+
+
+
+tav_tavozas_y <- format(men_valtasok_team$date_of_change, format = "%Y")
+tav_tavozas_y <- array(unlist(tav_tavozas_y))
+men_valtasok_team$tav_tavozas_y <- tav_tavozas_y
+
+men_valtasok_team$no_change <- "hmm"
+for (i in men_valtasok_team$prev_date_of_change) {
+  if (is.na(i)){
+    men_valtasok_team$no_change = paste0(men_valtasok_team$tav_tavozas_y,"/06/30")
+  }
+}
+men_valtasok_team$no_change <- as.Date(men_valtasok_team$no_change, "%Y/%m/%d")
+
+
+men_valtasok_team$date_is_lower <- men_valtasok_team$date_of_change < men_valtasok_team$no_change
+
+```
+
+```{r}
+men_valtasok_team$tav_tavozas_y_kisebb <- men_valtasok_team$tav_tavozas_y
+men_valtasok_team <- men_valtasok_team %>% 
+  mutate(tav_tavozas_y_kisebb = if_else(date_of_change < no_change, as.numeric(tav_tavozas_y) - 1, as.numeric(tav_tavozas_y)))
+men_valtasok_team$date_kisebb <- paste0(men_valtasok_team$tav_tavozas_y_kisebb,"/06/30")
+men_valtasok_team$date_kisebb <- as.Date(men_valtasok_team$date_kisebb, "%Y/%m/%d")
+
+men_valtasok_team$prev_date_of_change_2 <- ifelse(is.na(men_valtasok_team$prev_date_of_change), men_valtasok_team$date_kisebb, NA)
+men_valtasok_team$prev_date_of_change_3 <- as.Date(men_valtasok_team$prev_date_of_change_2)
+
+men_valtasok_team$prev_date_of_change_4 <-  coalesce(men_valtasok_team$prev_date_of_change,men_valtasok_team$prev_date_of_change_3) 
+
+view(men_valtasok_team)
+```
+
+##### tiszta adat létrehozása
+
+```{r}
+finmen <- men_valtasok_team
+
+finmen$prev_date_of_change <- finmen$prev_date_of_change_4
+finmen$date_of_change_2 <- NULL
+finmen[7:14]<- NULL
+finmen$from <- finmen$prev_date_of_change
+finmen$to <- finmen$date_of_change
+finmen$days_in_charge <- (finmen$to - finmen$from)/(60*60*24)
+```
+
+##### Összekapcsolás előkészítése
+
+```{r}
+good_man <- finmen
+
+good_man$date_of_change <- NULL
+good_man$erk_edzo <- NULL
+good_man$prev_date_of_change <- NULL
+good_man$days_in_charge <- NULL
+
+head(good_man)
+```
+
+```{r}
+data_ita_final <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ita_final.csv")
+```
+
+```{r}
+head(data_ita_final)
+```
+
+# Összekapcsolás, 1. kísérlet
+
+```{r}
+data_man_match_ita <- fuzzy_left_join(data_ita_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_ita <- data_man_match_ita %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_ita))
+```
+```{r}
+isnochange <- c("SPAL")
+```
+
+```{r}
+match_team<- unique(data_man_match_ita$team)
+match_team <- match_team[order(match_team)]
+match_team
+```
+
+```{r}
+man_team<- unique(good_man$Team)
+man_team <- man_team[order(man_team)]
+man_team
+```
+
+```{r}
+data_ita_final$team <- gsub("AC Milan", "Milan", data_ita_final$team)
+data_ita_final$team <- gsub("AS Livorno", "Livorno", data_ita_final$team)
+data_ita_final$team <- gsub("AS Roma", "Roma", data_ita_final$team)
+data_ita_final$team <- gsub("Atalanta BC", "Atalanta", data_ita_final$team)
+data_ita_final$team <- gsub("Cagliari Calcio", "Cagliari", data_ita_final$team)
+data_ita_final$team <- gsub("Inter", "Internazionale", data_ita_final$team)
+
+
+data_ita_final$team <- gsub("SSC Napoli", "Napoli", data_ita_final$team)
+data_ita_final$team <- gsub("Udinese Calcio", "Udinese", data_ita_final$team)
+data_ita_final$team <- gsub("US Palermo", "Palermo", data_ita_final$team)
+#data_ita_final$team <- gsub("KÁPOSZTALEVES", "KÁPOSZTALEVESKÁPOSZTALEVESKÁPOSZTALEVES", data_ita_final$team)
+
+#good_man$team <- gsub("KÁPOSZTALEVES", "KÁPOSZTALEVESKÁPOSZTALEVESKÁPOSZTALEVES", good_man$team)
+#good_man$team <- gsub("Chievo", "Chievo Verona", good_man$team)
+
+```
+
+# Összekapcsolás, 2. kísérlet
+
+```{r}
+data_man_match_ita <- fuzzy_left_join(data_ita_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_ita <- data_man_match_ita %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_ita))
+```
+
+```{r eval = FALSE}
+validity_ita <- data_man_match_ita 
+validity_ita[1:2] <- NULL
+validity_ita[3:11]<- NULL
+view(validity_ita)
+
+validity_ita <- validity_ita[order(as.Date(validity_ita$date, format="%Y-%m-%d")),decreasing = T]
+validity_ita <- validity_ita[order(validity_ita$team),decreasing = T]
+view(validity_ita)
+
+
+#validity_ita$tav_edzo <- na.locf(na.locf(validity_ita$tav_edzo),fromLast=TRUE)
+validity_ita$input_edz<-validity_ita$tav_edzo[match(validity_ita$tav_edzo,validity_ita$tav_edzo)]
+
+validity_ita <- validity_ita[order(as.Date(validity_ita$date, format="%Y-%m-%d")),decreasing = F]
+
+view(validity_ita)
+```
+
+```{r}
+csonka_ita <- data_man_match_ita[complete.cases(data_man_match_ita), ]
+csonka_ita$manager_name <- csonka_ita$tav_edzo
+csonka_ita$Team <- NULL
+csonka_ita$to <- NULL
+csonka_ita$from <- NULL
+csonka_ita$tav_edzo <- NULL
+csonka_ita <- csonka_ita %>%                                        
+  group_by(manager_name) %>%
+  mutate(men_id = cur_group_id())
+```
+
+```{r}
+write.csv(csonka_ita,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ita_better.csv')
+```
+
+
+################################ Tisztítás GER
+
+
+# 1. Nyers adatból men_dat_1 (később:erk_men_dat) és men_dat_2 (később:tav_men_dat)létrehozása
+
+## Nyers adat behívása
+
+```{r}
+
+men_valtasok <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/manager/man_clean_ger.xlsx")
+```
+
+## Adattisztítás
+
+```{r 1. adattiszt}
+
+#Speciális karakterek eltávolítása
+men_valtasokm <- gsub("[[:punct:]]", "", men_valtasok$`Outgoing manager`) 
+men_valtasokm1 <- gsub("[[:punct:]]", "", men_valtasok$`Replaced by`) 
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = men_valtasokm,erk_edzo = men_valtasokm1)
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = gsub("[0-9]","",men_valtasok$tav_edzo)) %>% mutate(erk_edzo = gsub("[0-9]","",men_valtasok$erk_edzo))
+
+men_valtasok <- men_valtasok %>% dplyr::select(-`Outgoing manager`,-`Replaced by`)
+
+men_valtasok <- men_valtasok %>%
+  rename(date_of_change = `Date of vacancy...4`,
+         date_of_change_2 = `Date of vacancy...6`,
+         manner = `Manner of departure`)
+colnames(men_valtasok)
+```
+
+```{r}
+men_valtasok$date_of_change <- gsub("\\s*\\[[^\\)]+\\]","",as.character(men_valtasok$date_of_change))
+men_valtasok$date_of_change <- men_valtasok$date_of_change %>% parse_date_time( "%d %B %Y")
+men_valtasok <- na.locf(na.locf(men_valtasok),fromLast=TRUE)
+```
+
+```{r}
+men_valtasok_team <- men_valtasok
+men_valtasok_team <- men_valtasok_team[order(as.Date(men_valtasok_team$date_of_change, format="%Y-%m-%d")),]
+
+men_valtasok_team <- 
+    men_valtasok_team %>%
+    group_by(Team) %>%
+    mutate(prev_date_of_change = dplyr::lag(date_of_change, n = 1, default = NA))
+
+
+
+tav_tavozas_y <- format(men_valtasok_team$date_of_change, format = "%Y")
+tav_tavozas_y <- array(unlist(tav_tavozas_y))
+men_valtasok_team$tav_tavozas_y <- tav_tavozas_y
+
+men_valtasok_team$no_change <- "hmm"
+for (i in men_valtasok_team$prev_date_of_change) {
+  if (is.na(i)){
+    men_valtasok_team$no_change = paste0(men_valtasok_team$tav_tavozas_y,"/06/30")
+  }
+}
+men_valtasok_team$no_change <- as.Date(men_valtasok_team$no_change, "%Y/%m/%d")
+
+
+men_valtasok_team$date_is_lower <- men_valtasok_team$date_of_change < men_valtasok_team$no_change
+
+```
+
+```{r}
+men_valtasok_team$tav_tavozas_y_kisebb <- men_valtasok_team$tav_tavozas_y
+men_valtasok_team <- men_valtasok_team %>% 
+  mutate(tav_tavozas_y_kisebb = if_else(date_of_change < no_change, as.numeric(tav_tavozas_y) - 1, as.numeric(tav_tavozas_y)))
+men_valtasok_team$date_kisebb <- paste0(men_valtasok_team$tav_tavozas_y_kisebb,"/06/30")
+men_valtasok_team$date_kisebb <- as.Date(men_valtasok_team$date_kisebb, "%Y/%m/%d")
+
+men_valtasok_team$prev_date_of_change_2 <- ifelse(is.na(men_valtasok_team$prev_date_of_change), men_valtasok_team$date_kisebb, NA)
+men_valtasok_team$prev_date_of_change_3 <- as.Date(men_valtasok_team$prev_date_of_change_2)
+
+men_valtasok_team$prev_date_of_change_4 <-  coalesce(men_valtasok_team$prev_date_of_change,men_valtasok_team$prev_date_of_change_3) 
+
+view(men_valtasok_team)
+```
+
+##### tiszta adat létrehozása
+
+```{r}
+finmen <- men_valtasok_team
+
+finmen$prev_date_of_change <- finmen$prev_date_of_change_4
+finmen$date_of_change_2 <- NULL
+finmen[7:14]<- NULL
+finmen$from <- finmen$prev_date_of_change
+finmen$to <- finmen$date_of_change
+finmen$days_in_charge <- (finmen$to - finmen$from)/(60*60*24)
+```
+
+##### Összekapcsolás előkészítése
+
+```{r}
+good_man <- finmen
+
+good_man$date_of_change <- NULL
+good_man$erk_edzo <- NULL
+good_man$prev_date_of_change <- NULL
+good_man$days_in_charge <- NULL
+
+head(good_man)
+```
+
+```{r}
+head(data_ger_final)
+```
+
+```{r}
+data_ger_final <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_ger_final.xlsx")
+```
+
+# Összekapcsolás, 1. kísérlet
+
+```{r}
+data_man_match_ger <- fuzzy_left_join(data_ger_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_ger <- data_man_match_ger %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_ger))
+```
+
+```{r}
+isnochange <- c("Karlsruher SC","Energie Cottbus","E. Braunschweig","F. D\xfcsseldorf","FC St. Pauli","SC Paderborn")
+```
+
+```{r}
+match_team<- unique(data_man_match_ger$team)
+match_team <- match_team[order(match_team)]
+match_team
+```
+
+```{r}
+man_team<- unique(good_man$Team)
+man_team <- man_team[order(man_team)]
+man_team
+```
+
+```{r}
+data_ger_final$team <- gsub("FC Bayern", "Bayern Munich", data_ger_final$team)
+data_ger_final$team <- gsub("Bay. Leverkusen", "Bayer Leverkusen", data_ger_final$team)
+data_ger_final$team <- gsub("Arm. Bielefeld", "Arminia Bielefeld", data_ger_final$team)
+data_ger_final$team <- gsub("E. Frankfurt", "Eintracht Frankfurt", data_ger_final$team)
+data_ger_final$team <- gsub("Bor. M'gladbach", "Borussia Mönchengladbach", data_ger_final$team)
+
+data_ger_final$team <- gsub("1.FC K'lautern", "1. FC Kaiserslautern", data_ger_final$team)
+data_ger_final$team <- gsub("1.FC Nuremberg", "1. FC Nürnberg", data_ger_final$team)
+data_ger_final$team <- gsub("1.FSV Mainz 05", "Mainz 05", data_ger_final$team)
+data_ger_final$team <- gsub("Bor. Dortmund", "Borussia Dortmund", data_ger_final$team)
+
+data_ger_final$team <- gsub("TSG Hoffenheim", "TSG 1899 Hoffenheim", data_ger_final$team)
+
+good_man$Team <- gsub("Schalke 04", "FC Schalke 04", good_man$Team)
+```
+
+# Összekapcsolás, 2. kísérlet
+
+```{r}
+data_man_match_ger <- fuzzy_left_join(data_ger_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_ger <- data_man_match_ger %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_ger))
+```
+
+```{r eval = F}
+validity_ger <- data_man_match_ger 
+validity_ger[1:2] <- NULL
+validity_ger[3:11]<- NULL
+view(validity_ger)
+
+validity_ger <- validity_ger[order(as.Date(validity_ger$date, format="%Y-%m-%d")),decreasing = T]
+validity_ger <- validity_ger[order(validity_ger$team),decreasing = T]
+view(validity_ger)
+
+
+#validity_ger$tav_edzo <- na.locf(na.locf(validity_ger$tav_edzo),fromLast=TRUE)
+validity_ger$input_edz<-validity_ger$tav_edzo[match(validity_ger$tav_edzo,validity_ger$tav_edzo)]
+
+validity_ger <- validity_ger[order(as.Date(validity_ger$date, format="%Y-%m-%d")),decreasing = F]
+
+view(validity_ger)
+```
+
+```{r}
+csonka_ger <- data_man_match_ger[complete.cases(data_man_match_ger), ]
+csonka_ger$manager_name <- csonka_ger$tav_edzo
+csonka_ger$Team <- NULL
+csonka_ger$to <- NULL
+csonka_ger$from <- NULL
+csonka_ger$tav_edzo <- NULL
+csonka_ger <- csonka_ger %>%                                        
+  group_by(manager_name) %>%
+  mutate(men_id = cur_group_id())
+```
+
+```{r}
+write.csv(csonka_ger,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ger_better.csv')
+```
+
+
+################################ Tisztítás FRA
+
+
+# 1. Nyers adatból men_dat_1 (később:erk_men_dat) és men_dat_2 (később:tav_men_dat)létrehozása
+
+## Nyers adat behívása
+
+```{r}
+men_valtasok <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/manager/man_clean_fra.xlsx")
+```
+
+## Adattisztítás
+
+```{r 1. adattiszt}
+
+#Speciális karakterek eltávolítása
+men_valtasokm <- gsub("[[:punct:]]", "", men_valtasok$`Outgoing head coach`) 
+men_valtasokm1 <- gsub("[[:punct:]]", "", men_valtasok$`Incoming head coach`) 
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = men_valtasokm,erk_edzo = men_valtasokm1)
+men_valtasok <- men_valtasok %>% mutate(tav_edzo = gsub("[0-9]","",men_valtasok$tav_edzo)) %>% mutate(erk_edzo = gsub("[0-9]","",men_valtasok$erk_edzo))
+
+men_valtasok <- men_valtasok %>% dplyr::select(-`Outgoing head coach`,-`Incoming head coach`)
+
+men_valtasok <- men_valtasok %>%
+  rename(date_of_change = `Date of vacancy...4`,
+         date_of_change_2 = `Date of vacancy...6`,
+         manner = `Manner of departure`)
+colnames(men_valtasok)
+```
+
+```{r}
+men_valtasok$date_of_change <- gsub("\\s*\\[[^\\)]+\\]","",as.character(men_valtasok$date_of_change))
+men_valtasok$date_of_change <- men_valtasok$date_of_change %>% parse_date_time( "%d %B %Y")
+men_valtasok <- na.locf(na.locf(men_valtasok),fromLast=TRUE)
+sum(is.na(men_valtasok))
+```
+
+```{r}
+men_valtasok_team <- men_valtasok
+men_valtasok_team <- men_valtasok_team[order(as.Date(men_valtasok_team$date_of_change, format="%Y-%m-%d")),]
+
+men_valtasok_team <- 
+    men_valtasok_team %>%
+    group_by(Team) %>%
+    mutate(prev_date_of_change = dplyr::lag(date_of_change, n = 1, default = NA))
+
+
+
+tav_tavozas_y <- format(men_valtasok_team$date_of_change, format = "%Y")
+tav_tavozas_y <- array(unlist(tav_tavozas_y))
+men_valtasok_team$tav_tavozas_y <- tav_tavozas_y
+
+men_valtasok_team$no_change <- "hmm"
+for (i in men_valtasok_team$prev_date_of_change) {
+  if (is.na(i)){
+    men_valtasok_team$no_change = paste0(men_valtasok_team$tav_tavozas_y,"/06/30")
+  }
+}
+men_valtasok_team$no_change <- as.Date(men_valtasok_team$no_change, "%Y/%m/%d")
+
+
+men_valtasok_team$date_is_lower <- men_valtasok_team$date_of_change < men_valtasok_team$no_change
+
+```
+
+```{r}
+men_valtasok_team$tav_tavozas_y_kisebb <- men_valtasok_team$tav_tavozas_y
+men_valtasok_team <- men_valtasok_team %>% 
+  mutate(tav_tavozas_y_kisebb = if_else(date_of_change < no_change, as.numeric(tav_tavozas_y) - 1, as.numeric(tav_tavozas_y)))
+men_valtasok_team$date_kisebb <- paste0(men_valtasok_team$tav_tavozas_y_kisebb,"/06/30")
+men_valtasok_team$date_kisebb <- as.Date(men_valtasok_team$date_kisebb, "%Y/%m/%d")
+
+men_valtasok_team$prev_date_of_change_2 <- ifelse(is.na(men_valtasok_team$prev_date_of_change), men_valtasok_team$date_kisebb, NA)
+men_valtasok_team$prev_date_of_change_3 <- as.Date(men_valtasok_team$prev_date_of_change_2)
+
+men_valtasok_team$prev_date_of_change_4 <-  coalesce(men_valtasok_team$prev_date_of_change,men_valtasok_team$prev_date_of_change_3) 
+
+#view(men_valtasok_team)
+```
+
+##### tiszta adat létrehozása
+
+```{r}
+finmen <- men_valtasok_team
+
+finmen$prev_date_of_change <- finmen$prev_date_of_change_4
+finmen$date_of_change_2 <- NULL
+finmen[7:14]<- NULL
+finmen$from <- finmen$prev_date_of_change
+finmen$to <- finmen$date_of_change
+finmen$days_in_charge <- (finmen$to - finmen$from)/(60*60*24)
+```
+
+##### Összekapcsolás előkészítése
+
+```{r}
+good_man <- finmen
+
+good_man$date_of_change <- NULL
+good_man$erk_edzo <- NULL
+good_man$prev_date_of_change <- NULL
+good_man$days_in_charge <- NULL
+
+head(good_man)
+```
+
+```{r}
+data_fra_final <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/data_fra_final.xlsx")
+```
+
+```{r}
+head(data_fra_final)
+```
+
+# Összekapcsolás, 1. kísérlet
+
+```{r}
+data_man_match_fra <- fuzzy_left_join(data_fra_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_fra <- data_man_match_fra %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_fra))
+```
+
+```{r}
+isnochange <- c("AC Le Havre", "Amiens SC","Grenoble", "Nimes Olympique", "R. Strasbourg", "SCO Angers")
+```
+
+```{r}
+match_team<- unique(data_man_match_fra$team)
+match_team <- match_team[order(match_team)]
+match_team
+```
+
+```{r}
+man_team<- unique(good_man$Team)
+man_team <- man_team[order(man_team)]
+man_team
+```
+
+```{r}
+
+data_fra_final$team <- gsub("AC Ajaccio", "Ajaccio", data_fra_final$team)
+data_fra_final$team <- gsub("AC Arles", "Arles-Avignon", data_fra_final$team)
+data_fra_final$team <- gsub("AJ Auxerre", "Auxerre", data_fra_final$team)
+data_fra_final$team <- gsub("AS Nancy", "Nancy", data_fra_final$team)
+data_fra_final$team <- gsub("FC Lorient", "Lorient", data_fra_final$team)
+
+data_fra_final$team <- gsub("FC Metz", "Metz", data_fra_final$team)
+data_fra_final$team <- gsub("FC Nantes", "Nantes", data_fra_final$team)
+data_fra_final$team <- gsub("FC Sochaux", "Sochaux", data_fra_final$team)
+data_fra_final$team <- gsub("G. Ajaccio", "Ajaccio", data_fra_final$team)
+data_fra_final$team <- gsub("G. Bordeaux", "Bordeaux", data_fra_final$team)
+
+data_fra_final$team <- gsub("Le Mans UC 72", "Le Mans", data_fra_final$team)
+data_fra_final$team <- gsub("LOSC Lille", "Lille", data_fra_final$team)
+data_fra_final$team <- gsub("OGC Nice", "Nice", data_fra_final$team)
+data_fra_final$team <- gsub("Olympique Lyon", "Lyon", data_fra_final$team)
+data_fra_final$team <- gsub("Paris SG", "Paris Saint-Germain", data_fra_final$team)
+
+data_fra_final$team <- gsub("SC Bastia", "Bastia", data_fra_final$team)
+data_fra_final$team <- gsub("SM Caen", "Caen", data_fra_final$team)
+data_fra_final$team <- gsub("Stade Brestois", "Brest", data_fra_final$team)
+data_fra_final$team <- gsub("Stade Reims", "Reims", data_fra_final$team)
+data_fra_final$team <- gsub("Stade Rennais", "Rennes", data_fra_final$team)
+data_fra_final$team <- gsub("US Boulogne", "Boulogne", data_fra_final$team)
+
+data_fra_final$team <- gsub("FC Valenciennes", "Valenciennes", data_fra_final$team)
+#data_fra_final$team <- gsub("KÁPOSZTALEVES", "KÁPOSZTALEVESKÁPOSZTALEVESKÁPOSZTALEVES", data_fra_final$team)
+
+
+
+
+#good_man$team <- gsub("KÁPOSZTALEVES", "KÁPOSZTALEVESKÁPOSZTALEVESKÁPOSZTALEVES", good_man$team)
+#good_man$team <- gsub("Chievo", "Chievo Verona", good_man$team)
+
+```
+
+# Összekapcsolás, 2. kísérlet
+
+```{r}
+data_man_match_fra <- fuzzy_left_join(data_fra_final,good_man,by = c("team" ="Team","date" ="from","date"="to"),match_fun = list(`==`,`>=`,`<=`))
+#data_man_match_fra <- data_man_match_fra %>% select(date,attendance,team,goals,points,team_opponent,goals_opponent,points_opponent,home,gameno,menedzser,men_id,erkezes,tavozas)
+sum(is.na(data_man_match_fra))
+```
+
+```{r eval = FALSE}
+validity_fra <- data_man_match_fra 
+validity_fra[1:2] <- NULL
+validity_fra[3:11]<- NULL
+view(validity_fra)
+
+validity_fra <- validity_fra[order(as.Date(validity_fra$date, format="%Y-%m-%d")),decreasing = T]
+validity_fra <- validity_fra[order(validity_fra$team),decreasing = T]
+view(validity_fra)
+
+
+#validity_fra$tav_edzo <- na.locf(na.locf(validity_fra$tav_edzo),fromLast=TRUE)
+validity_fra$input_edz<-validity_fra$tav_edzo[match(validity_fra$tav_edzo,validity_fra$tav_edzo)]
+
+validity_fra <- validity_fra[order(as.Date(validity_fra$date, format="%Y-%m-%d")),decreasing = F]
+
+view(validity_fra)
+```
+
+```{r}
+csonka_fra <- data_man_match_fra[complete.cases(data_man_match_fra), ]
+csonka_fra$manager_name <- csonka_fra$tav_edzo
+csonka_fra$Team <- NULL
+csonka_fra$to <- NULL
+csonka_fra$from <- NULL
+csonka_fra$tav_edzo <- NULL
+csonka_fra <- csonka_fra %>%                                        
+  group_by(manager_name) %>%
+  mutate(men_id = cur_group_id())
+```
+
+```{r}
+write.csv(csonka_fra,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_fra_better.csv')
+```
+
+
+
+################################ Új változók kontrollokhoz
+
+
+
+```{r}
+csonka_ger <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ger_better.csv")
+csonka_spa <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_spa_better.csv")
+csonka_ita <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ita_better.csv")
+csonka_fra <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_fra_better.csv")
+csonka_eng <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_eng_better.csv")
+```
+
+```{r}
+csonka_ger$manner <- NULL
+csonka_spa$manner <- NULL
+csonka_ita$manner <- NULL
+csonka_fra$manner <- NULL
+```
+
+```{r}
+colnames(csonka_spa)<-colnames(csonka_ger)
+colnames(csonka_spa)<-colnames(csonka_ita)
+colnames(csonka_spa)<-colnames(csonka_fra)
+colnames(csonka_spa)<-colnames(csonka_eng)
+
+csonka_all <- rbind(csonka_ger,csonka_spa,csonka_ita,csonka_fra,csonka_eng)
+
+```
+
+```{r}
+csonka_all_new_vars <- csonka_all
+
+mean_points_for_manager <- csonka_all_new_vars %>%
+  group_by(manager_name) %>%
+  summarise(mean_points_for_manager = mean(points)) %>% 
+  ungroup()
+
+
+csonka_all_new_vars <- left_join(csonka_all_new_vars,mean_points_for_manager, by="manager_name")
+
+```
+
+
+```{r}
+write.csv(csonka_all_new_vars,'C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv')
+```
+
+
+```{r}
+csonka_fra_better <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_fra_better.xlsx")
+csonka_all_new_vars <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv")
+csonka_csonka <- csonka_all_new_vars[c("team","season","manager_name","mean_points_for_manager")]
+csonka_fra_better_kieg <- left_join(csonka_fra_better,csonka_csonka, by=c("team","season","manager_name"))
+csonka_fra_better_kieg <- distinct(csonka_fra_better_kieg)
+
+write.csv(csonka_fra_better_kieg, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_fra_better_kieg_2.csv")
+```
+
+```{r}
+csonka_spa_better <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_spa_better.xlsx")
+csonka_all_new_vars <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv")
+csonka_csonka <- csonka_all_new_vars[c("team","season","manager_name","mean_points_for_manager")]
+csonka_spa_better_kieg <- left_join(csonka_spa_better,csonka_csonka, by=c("team","season","manager_name"))
+csonka_spa_better_kieg <- distinct(csonka_spa_better_kieg)
+
+write.csv(csonka_spa_better_kieg, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_spa_better_kieg_2.csv")
+```
+
+```{r}
+csonka_ita_better <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ita_better.xlsx")
+csonka_all_new_vars <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv")
+csonka_csonka <- csonka_all_new_vars[c("team","season","manager_name","mean_points_for_manager")]
+csonka_ita_better_kieg <- left_join(csonka_ita_better,csonka_csonka, by=c("team","season","manager_name"))
+csonka_ita_better_kieg <- distinct(csonka_ita_better_kieg)
+
+write.csv(csonka_ita_better_kieg, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_ita_better_kieg_2.csv")
+```
+
+```{r}
+csonka_ger_better <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_ger_better.xlsx")
+csonka_all_new_vars <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv")
+csonka_csonka <- csonka_all_new_vars[c("team","season","manager_name","mean_points_for_manager")]
+csonka_ger_better_kieg <- left_join(csonka_ger_better,csonka_csonka, by=c("team","season","manager_name"))
+csonka_ger_better_kieg <- distinct(csonka_ger_better_kieg)
+
+write.csv(csonka_ger_better_kieg, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_ger_better_kieg_2.csv")
+```
+
+```{r}
+csonka_eng_better <- read_excel("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_eng_better.xlsx")
+csonka_all_new_vars <- read.csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/csonka_all_new_vars.csv")
+csonka_csonka <- csonka_all_new_vars[c("team","season","manager_name","mean_points_for_manager")]
+csonka_eng_better_kieg <- left_join(csonka_eng_better,csonka_csonka, by=c("team","season","manager_name"))
+csonka_eng_better_kieg <- distinct(csonka_eng_better_kieg)
+
+write.csv(csonka_eng_better_kieg, "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_eng_better_kieg_2.csv")
+```
+
+
+################################ Regressions and plots
+
+
+```{r}
+# set data dir, data used
+setwd("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző")
+source("Békés/set-data-directory.R")             
+
+# load theme and functions
+source("Békés/ch00-tech-prep/theme_kd.R")
+source("Békés/ch00-tech-prep/da_helper_functions.R")
+a <- getwd()
+output = paste0(a,"/results")
+
+
+# Loading and preparing data ----------------------------------------------
+
+data <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_eng_better_kieg_2.csv")
+data <- data %>% mutate(manager_id = men_id)
+data <- distinct(data)
+
+# describe data
+data %>%
+  select(season, team, gameno, points) %>%
+  summary()
+
+# create manager change variable
+data <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(managchange = as.numeric(manager_id != dplyr::lag(manager_id))) %>%
+  mutate(countmanagchange = sum(managchange, na.rm = TRUE)) %>%
+  ungroup()
+
+table(data$managchange, useNA = "always")
+
+# some teams have multiple management changes in the season
+data %>%
+  group_by(countmanagchange) %>%
+  summarise(n_distinct(team, season))
+
+# *********************************************************************-
+#   BALANCED PANEL
+# *********************************************************************-
+
+# define intervention as management change
+# at least 12 games before (since season started or previous management changed)
+# at least 12 games after (till season ends or next management change)
+data_aux <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(max_gameno = max(gameno)) %>%
+  filter(managchange == 1) %>%
+  mutate(gamesbefore = ifelse(is.na(dplyr::lag(gameno)), gameno - 1, gameno - dplyr::lag(gameno)),
+         gamesafter = ifelse(is.na(dplyr::lead(gameno)), max_gameno - gameno, dplyr::lead(gameno) - gameno)) %>%
+  mutate(intervention = ifelse(gamesbefore<12 | gamesafter<12, 0, managchange)) %>%
+  select(team, season, date, intervention) %>%
+  ungroup()
+
+data_balanced <- left_join(data, data_aux) %>%
+  mutate(intervention = replace_na(intervention, 0)) %>%
+  group_by(team, season) %>%
+  mutate(countinterv = sum(intervention, na.rm = TRUE)) %>%
+  mutate(intervention_time = min(ifelse(intervention == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_event = ifelse(is.infinite(intervention_time), NA, gameno - intervention_time)) %>%
+  mutate(t_event = ifelse(t_event>=0 & t_event<=38, t_event+1, t_event)) %>% # Intervention event study time (to -1 before, from +1 after)
+  ungroup() %>%
+  filter((countinterv==1 & t_event>=-12 & t_event<=12) | countmanagchange==0)
+
+data_balanced %>%
+  group_by(countinterv) %>%
+  summarise(n_distinct(team, season))
+
+# figure: average number interventions by game number
+p3<- ggplot(data = data_balanced, aes(x = gameno, y = intervention)) +
+  geom_col(fill = color[1], size = 0.25, alpha = 0.8,  show.legend=F, na.rm =TRUE) +
+  labs(y = "Number of manager changes", x = "Game number") +
+  scale_y_continuous(expand=c(0.0,0.0), breaks = seq(1, 6, by = 1), limits = c(0, 6)) +
+  scale_x_continuous(expand=c(0.01,0.01), breaks = seq(0, 38, 4), limits = c(0, 38)) +
+  background_grid(major = "none", minor = "none")+
+  theme_bg()
+p3
+save_fig("ch24-figure-3-football-managchanges", output, "large")
+
+# figure: average points by event time
+p4<-getPointsGraph(data_balanced, colors = color, num=12)
+p4
+save_fig("ch24-figure-4-football-manager-points1", output, "large")
+
+# *********************************************************************-
+#   * CREATE CONTORL GROUP WITH PSEUDO-INTERVENTIONS
+# *********************************************************************-
+# for each game, define avg diff of points 12-7 before
+# dip: avg diff of points 6-1 before minus 12-7 before
+data_balanced <- data_balanced %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(points_b_7_12 = dplyr::lag(points, 12) + dplyr::lag(points, 11) + dplyr::lag(points, 10) +
+           dplyr::lag(points, 9) + dplyr::lag(points, 8) + dplyr::lag(points, 7),
+         points_b_1_6 = dplyr::lag(points, 6) + dplyr::lag(points, 5) + dplyr::lag(points, 4) +
+           dplyr::lag(points, 3) + dplyr::lag(points, 2) + dplyr::lag(points, 1)) %>%
+  mutate(dip = points_b_1_6/6 - points_b_7_12/6,
+         points_b_1= dplyr::lag(points)) %>%
+  ungroup()
+
+# summary stats of dip when intervention
+data_balanced %>%
+  filter(intervention == 1) %>%
+  select(points_b_1_6, points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# set ranges to define control group
+points_b_7_12min <-  5
+points_b_7_12max <-  9.5
+dipmin <- -4
+dipmax <- -0
+points_b_1min <-  0
+points_b_1max <-  0
+
+# define pseudo-intervention
+data_balanced <- data_balanced %>%
+  mutate(pseudo = as.numeric(countmanagchange==0 & dip>=dipmin & dip<=dipmax
+                   & points_b_7_12>=points_b_7_12min & points_b_7_12<=points_b_7_12max
+                   & points_b_1>=points_b_1min & points_b_1<=points_b_1max
+                   & gameno < (38-12) # games with 12 left in the season
+                   ))
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# if more such games in a teamXseason, choose one randomly
+
+# Note: In the textbook (2021 edition) we say  "When there was more than one candidate game within the same season for the same team, we selected the first one in the season."
+# In fact we mean "..., we selected **one in the season randomly**."
+
+data_balanced <- chooseRandomPseudo(data_balanced)
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+data_balanced <- data_balanced %>%
+  group_by(team, season) %>%
+  mutate(countpseudo = sum(pseudo, na.rm = TRUE)) %>%
+  mutate(pseudo_time = min(ifelse(pseudo == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_pseudo = ifelse(is.infinite(pseudo_time), NA, gameno - pseudo_time)) %>%
+  mutate(t_pseudo = ifelse(t_pseudo>=0 & t_pseudo<=38, t_pseudo+1, t_pseudo)) %>%
+  mutate(t_event = ifelse(is.na(t_event), t_pseudo, t_event)) %>%
+  ungroup() %>%
+  filter(t_event>=-12 & t_event<=12)
+
+table(data_balanced$intervention, data_balanced$pseudo)
+data_balanced %>%
+  group_by(countinterv, countpseudo) %>%
+  summarise(n_distinct(team, season))
+
+# FIGURE with intervention and pseudo-intervention averages
+p5<-getPointsGraphWithPseudo(data_balanced, colors = color,num=12)
+p5
+save_fig("abra_eng_ugye", output, "large")
+
+# ******************************************************************
+# REGRESSION with 6-game averages
+data_balanced_agg <- data_balanced %>%
+  mutate(teamseason = factor(paste0(team, season))) %>%
+  group_by(teamseason, t6_event = droplevels(cut(t_event, c(-13,-6,0, 1,7,13), right = FALSE))) %>%
+  summarise(treated = mean(countinterv), 
+            points6avg = round(mean(points), 6), 
+            season_year = mean(season) + 2000,
+            manager_quality = mean(mean_points_for_manager),
+            team = team,
+            league = league) %>%
+  arrange(teamseason, t6_event) %>%
+  distinct() %>% 
+  group_by(teamseason) %>%
+  mutate(Dp6avg = points6avg - dplyr::lag(points6avg)) %>%
+  ungroup()
+
+
+data_balanced_agg <- cbind(data_balanced_agg,
+                           sapply(levels(data_balanced_agg$t6_event),
+                                  function(x) as.integer(x == data_balanced_agg$t6_event)))
+
+colnames(data_balanced_agg)[10:13] <- c("before_7_12", "before_1_6", "after_1_6", "after_7_12")
+
+data_balanced_agg <- data_balanced_agg %>% mutate(after_1_6_treat = after_1_6 * treated,
+                                                                    after_7_12_treat = after_7_12 * treated)
+
+data_balanced_agg %>%
+  select(Dp6avg, after_1_6, after_7_12) %>%
+  summary()
+
+# FD REGRESSIONS
+fd_treatment <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                   data = filter(data_balanced_agg, treated == 1))
+fd_control <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                 data = filter(data_balanced_agg, treated == 0))
+fd_eng_for_final <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + I(treated*after_1_6) + I(treated*after_7_12),
+                 data = data_balanced_agg)
+
+summary(fd_treatment)
+summary(fd_control)
+summary(fd)
+
+stargazer_r(list(fd_treatment, fd_control, fd_eng_for_final), se = 'robust',
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/csak_eng_ugye.html"
+)
+
+stargazer_r(list(fd_treatment, fd_control, fd_eng_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+            )
+            
+
+###################################
+###################################
+###################################
+################################### SPA
+###################################
+###################################
+###################################
+
+
+
+data <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_spa_better_kieg_2.csv")
+data <- data %>% mutate(manager_id = men_id)
+data <- distinct(data)
+# describe data
+data %>%
+  select(season, team, gameno, points) %>%
+  summary()
+
+# create manager change variable
+data <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(managchange = as.numeric(manager_id != dplyr::lag(manager_id))) %>%
+  mutate(countmanagchange = sum(managchange, na.rm = TRUE)) %>%
+  ungroup()
+
+table(data$managchange, useNA = "always")
+# some teams have multiple management changes in the season
+data %>%
+  group_by(countmanagchange) %>%
+  summarise(n_distinct(team, season))
+
+# *********************************************************************-
+#   BALANCED PANEL
+# *********************************************************************-
+
+# define intervention as management change
+# at least 12 games before (since season started or previous management changed)
+# at least 12 games after (till season ends or next management change)
+data_aux <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(max_gameno = max(gameno)) %>%
+  filter(managchange == 1) %>%
+  mutate(gamesbefore = ifelse(is.na(dplyr::lag(gameno)), gameno - 1, gameno - dplyr::lag(gameno)),
+         gamesafter = ifelse(is.na(dplyr::lead(gameno)), max_gameno - gameno, dplyr::lead(gameno) - gameno)) %>%
+  mutate(intervention = ifelse(gamesbefore<12 | gamesafter<12, 0, managchange)) %>%
+  select(team, season, date, intervention) %>%
+  ungroup()
+
+data_balanced <- left_join(data, data_aux) %>%
+  mutate(intervention = replace_na(intervention, 0)) %>%
+  group_by(team, season) %>%
+  mutate(countinterv = sum(intervention, na.rm = TRUE)) %>%
+  mutate(intervention_time = min(ifelse(intervention == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_event = ifelse(is.infinite(intervention_time), NA, gameno - intervention_time)) %>%
+  mutate(t_event = ifelse(t_event>=0 & t_event<=38, t_event+1, t_event)) %>% # Intervention event study time (to -1 before, from +1 after)
+  ungroup() %>%
+  filter((countinterv==1 & t_event>=-12 & t_event<=12) | countmanagchange==0)
+
+data_balanced %>%
+  group_by(countinterv) %>%
+  summarise(n_distinct(team, season))
+
+# figure: average number interventions by game number
+p3<- ggplot(data = data_balanced, aes(x = gameno, y = intervention)) +
+  geom_col(fill = color[1], size = 0.25, alpha = 0.8,  show.legend=F, na.rm =TRUE) +
+  labs(y = "Number of manager changes", x = "Game number") +
+  scale_y_continuous(expand=c(0.0,0.0), breaks = seq(1, 6, by = 1), limits = c(0, 6)) +
+  scale_x_continuous(expand=c(0.01,0.01), breaks = seq(0, 38, 4), limits = c(0, 38)) +
+  background_grid(major = "none", minor = "none")+
+  theme_bg()
+p3
+save_fig("ch24-figure-3-football-managchanges", output, "large")
+
+# figure: average points by event time
+p4<-getPointsGraph(data_balanced, colors = color, num=12)
+p4
+save_fig("ch24-figure-4-football-manager-points1", output, "large")
+
+# *********************************************************************-
+#   * CREATE CONTORL GROUP WITH PSEUDO-INTERVENTIONS
+# *********************************************************************-
+# for each game, define avg diff of points 12-7 before
+# dip: avg diff of points 6-1 before minus 12-7 before
+data_balanced <- data_balanced %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(points_b_7_12 = dplyr::lag(points, 12) + dplyr::lag(points, 11) + dplyr::lag(points, 10) +
+           dplyr::lag(points, 9) + dplyr::lag(points, 8) + dplyr::lag(points, 7),
+         points_b_1_6 = dplyr::lag(points, 6) + dplyr::lag(points, 5) + dplyr::lag(points, 4) +
+           dplyr::lag(points, 3) + dplyr::lag(points, 2) + dplyr::lag(points, 1)) %>%
+  mutate(dip = points_b_1_6/6 - points_b_7_12/6,
+         points_b_1= dplyr::lag(points)) %>%
+  ungroup()
+
+# summary stats of dip when intervention
+data_balanced %>%
+  filter(intervention == 1) %>%
+  select(points_b_1_6, points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# set ranges to define control group
+points_b_7_12min <-  4
+points_b_7_12max <-  9
+dipmin <- -2
+dipmax <- -0
+points_b_1min <-  0
+points_b_1max <-  0
+
+# define pseudo-intervention
+data_balanced <- data_balanced %>%
+  mutate(pseudo = as.numeric(countmanagchange==0 & dip>=dipmin & dip<=dipmax
+                             & points_b_7_12>=points_b_7_12min & points_b_7_12<=points_b_7_12max
+                             & points_b_1>=points_b_1min & points_b_1<=points_b_1max
+                             & gameno < (38-12) # games with 12 left in the season
+  ))
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# if more such games in a teamXseason, choose one randomly
+
+# Note: In the textbook (2021 edition) we say  "When there was more than one candidate game within the same season for the same team, we selected the first one in the season."
+# In fact we mean "..., we selected **one in the season randomly**."
+
+data_balanced <- chooseRandomPseudo(data_balanced)
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+data_balanced <- data_balanced %>%
+  group_by(team, season) %>%
+  mutate(countpseudo = sum(pseudo, na.rm = TRUE)) %>%
+  mutate(pseudo_time = min(ifelse(pseudo == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_pseudo = ifelse(is.infinite(pseudo_time), NA, gameno - pseudo_time)) %>%
+  mutate(t_pseudo = ifelse(t_pseudo>=0 & t_pseudo<=38, t_pseudo+1, t_pseudo)) %>%
+  mutate(t_event = ifelse(is.na(t_event), t_pseudo, t_event)) %>%
+  ungroup() %>%
+  filter(t_event>=-12 & t_event<=12)
+
+table(data_balanced$intervention, data_balanced$pseudo)
+data_balanced %>%
+  group_by(countinterv, countpseudo) %>%
+  summarise(n_distinct(team, season))
+
+# FIGURE with intervention and pseudo-intervention averages
+p5<-getPointsGraphWithPseudo(data_balanced, colors = color,num=12)
+p5
+save_fig("abra_spa_ugye", output, "large")
+
+# ******************************************************************
+# REGRESSION with 6-game averages
+data_balanced_agg <- data_balanced %>%
+  mutate(teamseason = factor(paste0(team, season))) %>%
+  group_by(teamseason, t6_event = droplevels(cut(t_event, c(-13,-6,0, 1,7,13), right = FALSE))) %>%
+  summarise(treated = mean(countinterv), 
+            points6avg = round(mean(points), 6), 
+            season_year = mean(season) + 2000,
+            manager_quality = mean(mean_points_for_manager),
+            team = team,
+            league = league) %>%
+  arrange(teamseason, t6_event) %>%
+  distinct() %>% 
+  group_by(teamseason) %>%
+  mutate(Dp6avg = points6avg - dplyr::lag(points6avg)) %>%
+  ungroup()
+
+data_balanced_agg <- cbind(data_balanced_agg,
+                           sapply(levels(data_balanced_agg$t6_event),
+                                  function(x) as.integer(x == data_balanced_agg$t6_event)))
+
+colnames(data_balanced_agg)[10:13] <- c("before_7_12", "before_1_6", "after_1_6", "after_7_12")
+
+data_balanced_agg <- data_balanced_agg %>% mutate(after_1_6_treat = after_1_6 * treated,
+                                                  after_7_12_treat = after_7_12 * treated)
+
+data_balanced_agg %>%
+  select(Dp6avg, after_1_6, after_7_12) %>%
+  summary()
+
+# FD REGRESSIONS
+fd_treatment <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                   data = filter(data_balanced_agg, treated == 1))
+fd_control <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                 data = filter(data_balanced_agg, treated == 0))
+fd_spa_for_final <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + I(treated*after_1_6) + I(treated*after_7_12),
+                       data = data_balanced_agg)
+
+summary(fd_treatment)
+summary(fd_control)
+summary(fd)
+
+stargazer_r(list(fd_treatment, fd_control, fd_spa_for_final), se = 'robust',
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/csak_spa_ugye.html"
+)
+
+stargazer_r(list(fd_treatment, fd_control, fd_spa_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+)
+
+
+
+
+
+
+
+###################################
+###################################
+###################################
+################################### ITA
+###################################
+###################################
+###################################
+
+
+
+
+
+
+
+
+
+data <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_ita_better_kieg_2.csv")
+data <- data %>% mutate(manager_id = men_id)
+data <- distinct(data)
+# describe data
+data %>%
+  select(season, team, gameno, points) %>%
+  summary()
+
+# create manager change variable
+data <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(managchange = as.numeric(manager_id != dplyr::lag(manager_id))) %>%
+  mutate(countmanagchange = sum(managchange, na.rm = TRUE)) %>%
+  ungroup()
+
+table(data$managchange, useNA = "always")
+# some teams have multiple management changes in the season
+data %>%
+  group_by(countmanagchange) %>%
+  summarise(n_distinct(team, season))
+
+# *********************************************************************-
+#   BALANCED PANEL
+# *********************************************************************-
+
+# define intervention as management change
+# at least 12 games before (since season started or previous management changed)
+# at least 12 games after (till season ends or next management change)
+data_aux <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(max_gameno = max(gameno)) %>%
+  filter(managchange == 1) %>%
+  mutate(gamesbefore = ifelse(is.na(dplyr::lag(gameno)), gameno - 1, gameno - dplyr::lag(gameno)),
+         gamesafter = ifelse(is.na(dplyr::lead(gameno)), max_gameno - gameno, dplyr::lead(gameno) - gameno)) %>%
+  mutate(intervention = ifelse(gamesbefore<12 | gamesafter<12, 0, managchange)) %>%
+  select(team, season, date, intervention) %>%
+  ungroup()
+
+data_balanced <- left_join(data, data_aux) %>%
+  mutate(intervention = replace_na(intervention, 0)) %>%
+  group_by(team, season) %>%
+  mutate(countinterv = sum(intervention, na.rm = TRUE)) %>%
+  mutate(intervention_time = min(ifelse(intervention == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_event = ifelse(is.infinite(intervention_time), NA, gameno - intervention_time)) %>%
+  mutate(t_event = ifelse(t_event>=0 & t_event<=38, t_event+1, t_event)) %>% # Intervention event study time (to -1 before, from +1 after)
+  ungroup() %>%
+  filter((countinterv==1 & t_event>=-12 & t_event<=12) | countmanagchange==0)
+
+data_balanced %>%
+  group_by(countinterv) %>%
+  summarise(n_distinct(team, season))
+
+# figure: average number interventions by game number
+p3<- ggplot(data = data_balanced, aes(x = gameno, y = intervention)) +
+  geom_col(fill = color[1], size = 0.25, alpha = 0.8,  show.legend=F, na.rm =TRUE) +
+  labs(y = "Number of manager changes", x = "Game number") +
+  scale_y_continuous(expand=c(0.0,0.0), breaks = seq(1, 6, by = 1), limits = c(0, 6)) +
+  scale_x_continuous(expand=c(0.01,0.01), breaks = seq(0, 38, 4), limits = c(0, 38)) +
+  background_grid(major = "none", minor = "none")+
+  theme_bg()
+p3
+save_fig("ch24-figure-3-football-managchanges", output, "large")
+
+# figure: average points by event time
+p4<-getPointsGraph(data_balanced, colors = color, num=12)
+p4
+save_fig("ch24-figure-4-football-manager-points1", output, "large")
+
+# *********************************************************************-
+#   * CREATE CONTORL GROUP WITH PSEUDO-INTERVENTIONS
+# *********************************************************************-
+# for each game, define avg diff of points 12-7 before
+# dip: avg diff of points 6-1 before minus 12-7 before
+data_balanced <- data_balanced %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(points_b_7_12 = dplyr::lag(points, 12) + dplyr::lag(points, 11) + dplyr::lag(points, 10) +
+           dplyr::lag(points, 9) + dplyr::lag(points, 8) + dplyr::lag(points, 7),
+         points_b_1_6 = dplyr::lag(points, 6) + dplyr::lag(points, 5) + dplyr::lag(points, 4) +
+           dplyr::lag(points, 3) + dplyr::lag(points, 2) + dplyr::lag(points, 1)) %>%
+  mutate(dip = points_b_1_6/6 - points_b_7_12/6,
+         points_b_1= dplyr::lag(points)) %>%
+  ungroup()
+
+# summary stats of dip when intervention
+data_balanced %>%
+  filter(intervention == 1) %>%
+  select(points_b_1_6, points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# set ranges to define control group
+points_b_7_12min = 4
+points_b_7_12max = 8
+dipmin = -0.8
+dipmax = -0
+points_b_1min = 0
+points_b_1max = 1
+
+# define pseudo-intervention
+data_balanced <- data_balanced %>%
+  mutate(pseudo = as.numeric(countmanagchange==0 & dip>=dipmin & dip<=dipmax
+                             & points_b_7_12>=points_b_7_12min & points_b_7_12<=points_b_7_12max
+                             & points_b_1>=points_b_1min & points_b_1<=points_b_1max
+                             & gameno < (38-12) # games with 12 left in the season
+  ))
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# if more such games in a teamXseason, choose one randomly
+
+# Note: In the textbook (2021 edition) we say  "When there was more than one candidate game within the same season for the same team, we selected the first one in the season."
+# In fact we mean "..., we selected **one in the season randomly**."
+
+data_balanced <- chooseRandomPseudo(data_balanced)
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+data_balanced <- data_balanced %>%
+  group_by(team, season) %>%
+  mutate(countpseudo = sum(pseudo, na.rm = TRUE)) %>%
+  mutate(pseudo_time = min(ifelse(pseudo == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_pseudo = ifelse(is.infinite(pseudo_time), NA, gameno - pseudo_time)) %>%
+  mutate(t_pseudo = ifelse(t_pseudo>=0 & t_pseudo<=38, t_pseudo+1, t_pseudo)) %>%
+  mutate(t_event = ifelse(is.na(t_event), t_pseudo, t_event)) %>%
+  ungroup() %>%
+  filter(t_event>=-12 & t_event<=12)
+
+table(data_balanced$intervention, data_balanced$pseudo)
+data_balanced %>%
+  group_by(countinterv, countpseudo) %>%
+  summarise(n_distinct(team, season))
+
+# FIGURE with intervention and pseudo-intervention averages
+p5<-getPointsGraphWithPseudo(data_balanced, colors = color,num=12)
+p5
+save_fig("abra_ita_ugye", output, "large")
+
+# ******************************************************************
+# REGRESSION with 6-game averages
+data_balanced_agg <- data_balanced %>%
+  mutate(teamseason = factor(paste0(team, season))) %>%
+  group_by(teamseason, t6_event = droplevels(cut(t_event, c(-13,-6,0, 1,7,13), right = FALSE))) %>%
+  summarise(treated = mean(countinterv), 
+            points6avg = round(mean(points), 6), 
+            season_year = mean(season) + 2000,
+            manager_quality = mean(mean_points_for_manager),
+            team = team,
+            league = league) %>%
+  arrange(teamseason, t6_event) %>%
+  distinct() %>% 
+  group_by(teamseason) %>%
+  mutate(Dp6avg = points6avg - dplyr::lag(points6avg)) %>%
+  ungroup()
+
+
+data_balanced_agg <- cbind(data_balanced_agg,
+                           sapply(levels(data_balanced_agg$t6_event),
+                                  function(x) as.integer(x == data_balanced_agg$t6_event)))
+
+colnames(data_balanced_agg)[10:13] <- c("before_7_12", "before_1_6", "after_1_6", "after_7_12")
+
+data_balanced_agg <- data_balanced_agg %>% mutate(after_1_6_treat = after_1_6 * treated,
+                                                  after_7_12_treat = after_7_12 * treated)
+
+data_balanced_agg %>%
+  select(Dp6avg, after_1_6, after_7_12) %>%
+  summary()
+
+# FD REGRESSIONS
+fd_treatment <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                   data = filter(data_balanced_agg, treated == 1))
+fd_control <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                 data = filter(data_balanced_agg, treated == 0))
+fd_ita_for_final <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + I(treated*after_1_6) + I(treated*after_7_12),
+                       data = data_balanced_agg)
+
+summary(fd_treatment)
+summary(fd_control)
+summary(fd)
+
+stargazer_r(list(fd_treatment, fd_control, fd_ita_for_final), se = 'robust',
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/csak_ita_ugye.html"
+)
+
+stargazer_r(list(fd_treatment, fd_control, fd_ita_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################################
+###################################
+###################################
+################################### FRA
+###################################
+###################################
+###################################
+
+
+
+
+
+data <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_fra_better_kieg_2.csv")
+data <- data %>% mutate(manager_id = men_id)
+data <- distinct(data)
+# describe data
+data %>%
+  select(season, team, gameno, points) %>%
+  summary()
+
+# create manager change variable
+data <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(managchange = as.numeric(manager_id != dplyr::lag(manager_id))) %>%
+  mutate(countmanagchange = sum(managchange, na.rm = TRUE)) %>%
+  ungroup()
+
+table(data$managchange, useNA = "always")
+# some teams have multiple management changes in the season
+data %>%
+  group_by(countmanagchange) %>%
+  summarise(n_distinct(team, season))
+
+# *********************************************************************-
+#   BALANCED PANEL
+# *********************************************************************-
+
+# define intervention as management change
+# at least 12 games before (since season started or previous management changed)
+# at least 12 games after (till season ends or next management change)
+data_aux <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(max_gameno = max(gameno)) %>%
+  filter(managchange == 1) %>%
+  mutate(gamesbefore = ifelse(is.na(dplyr::lag(gameno)), gameno - 1, gameno - dplyr::lag(gameno)),
+         gamesafter = ifelse(is.na(dplyr::lead(gameno)), max_gameno - gameno, dplyr::lead(gameno) - gameno)) %>%
+  mutate(intervention = ifelse(gamesbefore<12 | gamesafter<12, 0, managchange)) %>%
+  select(team, season, date, intervention) %>%
+  ungroup()
+
+data_balanced <- left_join(data, data_aux) %>%
+  mutate(intervention = replace_na(intervention, 0)) %>%
+  group_by(team, season) %>%
+  mutate(countinterv = sum(intervention, na.rm = TRUE)) %>%
+  mutate(intervention_time = min(ifelse(intervention == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_event = ifelse(is.infinite(intervention_time), NA, gameno - intervention_time)) %>%
+  mutate(t_event = ifelse(t_event>=0 & t_event<=38, t_event+1, t_event)) %>% # Intervention event study time (to -1 before, from +1 after)
+  ungroup() %>%
+  filter((countinterv==1 & t_event>=-12 & t_event<=12) | countmanagchange==0)
+
+data_balanced %>%
+  group_by(countinterv) %>%
+  summarise(n_distinct(team, season))
+
+# figure: average number interventions by game number
+p3<- ggplot(data = data_balanced, aes(x = gameno, y = intervention)) +
+  geom_col(fill = color[1], size = 0.25, alpha = 0.8,  show.legend=F, na.rm =TRUE) +
+  labs(y = "Number of manager changes", x = "Game number") +
+  scale_y_continuous(expand=c(0.0,0.0), breaks = seq(1, 6, by = 1), limits = c(0, 6)) +
+  scale_x_continuous(expand=c(0.01,0.01), breaks = seq(0, 38, 4), limits = c(0, 38)) +
+  background_grid(major = "none", minor = "none")+
+  theme_bg()
+p3
+save_fig("ch24-figure-3-football-managchanges", output, "large")
+
+# figure: average points by event time
+p4<-getPointsGraph(data_balanced, colors = color, num=12)
+p4
+save_fig("ch24-figure-4-football-manager-points1", output, "large")
+
+# *********************************************************************-
+#   * CREATE CONTORL GROUP WITH PSEUDO-INTERVENTIONS
+# *********************************************************************-
+# for each game, define avg diff of points 12-7 before
+# dip: avg diff of points 6-1 before minus 12-7 before
+data_balanced <- data_balanced %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(points_b_7_12 = dplyr::lag(points, 12) + dplyr::lag(points, 11) + dplyr::lag(points, 10) +
+           dplyr::lag(points, 9) + dplyr::lag(points, 8) + dplyr::lag(points, 7),
+         points_b_1_6 = dplyr::lag(points, 6) + dplyr::lag(points, 5) + dplyr::lag(points, 4) +
+           dplyr::lag(points, 3) + dplyr::lag(points, 2) + dplyr::lag(points, 1)) %>%
+  mutate(dip = points_b_1_6/6 - points_b_7_12/6,
+         points_b_1= dplyr::lag(points)) %>%
+  ungroup()
+
+# summary stats of dip when intervention
+data_balanced %>%
+  filter(intervention == 1) %>%
+  select(points_b_1_6, points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# set ranges to define control group
+points_b_7_12min = 6
+points_b_7_12max = 8
+dipmin = -0.4
+dipmax = -0
+points_b_1min = 0
+points_b_1max = 3
+
+# define pseudo-intervention
+data_balanced <- data_balanced %>%
+  mutate(pseudo = as.numeric(countmanagchange==0 & dip>=dipmin & dip<=dipmax
+                             & points_b_7_12>=points_b_7_12min & points_b_7_12<=points_b_7_12max
+                             & points_b_1>=points_b_1min & points_b_1<=points_b_1max
+                             & gameno < (38-12) # games with 12 left in the season
+  ))
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# if more such games in a teamXseason, choose one randomly
+
+# Note: In the textbook (2021 edition) we say  "When there was more than one candidate game within the same season for the same team, we selected the first one in the season."
+# In fact we mean "..., we selected **one in the season randomly**."
+
+data_balanced <- chooseRandomPseudo(data_balanced)
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+data_balanced <- data_balanced %>%
+  group_by(team, season) %>%
+  mutate(countpseudo = sum(pseudo, na.rm = TRUE)) %>%
+  mutate(pseudo_time = min(ifelse(pseudo == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_pseudo = ifelse(is.infinite(pseudo_time), NA, gameno - pseudo_time)) %>%
+  mutate(t_pseudo = ifelse(t_pseudo>=0 & t_pseudo<=38, t_pseudo+1, t_pseudo)) %>%
+  mutate(t_event = ifelse(is.na(t_event), t_pseudo, t_event)) %>%
+  ungroup() %>%
+  filter(t_event>=-12 & t_event<=12)
+
+table(data_balanced$intervention, data_balanced$pseudo)
+data_balanced %>%
+  group_by(countinterv, countpseudo) %>%
+  summarise(n_distinct(team, season))
+
+# FIGURE with intervention and pseudo-intervention averages
+p5<-getPointsGraphWithPseudo(data_balanced, colors = color,num=12)
+p5
+save_fig("abra_fra_ugye", output, "large")
+
+# ******************************************************************
+# REGRESSION with 6-game averages
+data_balanced_agg <- data_balanced %>%
+  mutate(teamseason = factor(paste0(team, season))) %>%
+  group_by(teamseason, t6_event = droplevels(cut(t_event, c(-13,-6,0, 1,7,13), right = FALSE))) %>%
+  summarise(treated = mean(countinterv), 
+            points6avg = round(mean(points), 6), 
+            season_year = mean(season) + 2000,
+            manager_quality = mean(mean_points_for_manager),
+            team = team,
+            league = league) %>%
+  arrange(teamseason, t6_event) %>%
+  distinct() %>% 
+  group_by(teamseason) %>%
+  mutate(Dp6avg = points6avg - dplyr::lag(points6avg)) %>%
+  ungroup()
+
+
+data_balanced_agg <- cbind(data_balanced_agg,
+                           sapply(levels(data_balanced_agg$t6_event),
+                                  function(x) as.integer(x == data_balanced_agg$t6_event)))
+
+colnames(data_balanced_agg)[10:13] <- c("before_7_12", "before_1_6", "after_1_6", "after_7_12")
+
+data_balanced_agg <- data_balanced_agg %>% mutate(after_1_6_treat = after_1_6 * treated,
+                                                  after_7_12_treat = after_7_12 * treated)
+
+data_balanced_agg %>%
+  select(Dp6avg, after_1_6, after_7_12) %>%
+  summary()
+
+# FD REGRESSIONS
+fd_treatment <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                   data = filter(data_balanced_agg, treated == 1))
+fd_control <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                 data = filter(data_balanced_agg, treated == 0))
+fd_fra_for_final <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + I(treated*after_1_6) + I(treated*after_7_12),
+                       data = data_balanced_agg)
+
+summary(fd_treatment)
+summary(fd_control)
+summary(fd)
+
+stargazer_r(list(fd_treatment, fd_control, fd_fra_for_final), se = 'robust',
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/csak_fra_ugye.html"
+)
+
+stargazer_r(list(fd_treatment, fd_control, fd_fra_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+)
+
+
+
+
+
+
+###################################
+###################################
+###################################
+################################### GER
+###################################
+###################################
+###################################
+
+
+
+
+
+
+data <- read_csv("C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/adatok/vegleges_szuperek/csonka_ger_better_kieg_2.csv")
+data <- data %>% mutate(manager_id = men_id)
+data <- distinct(data)
+# describe data
+data %>%
+  select(season, team, gameno, points) %>%
+  summary()
+
+# create manager change variable
+data <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(managchange = as.numeric(manager_id != dplyr::lag(manager_id))) %>%
+  mutate(countmanagchange = sum(managchange, na.rm = TRUE)) %>%
+  ungroup()
+
+table(data$managchange, useNA = "always")
+# some teams have multiple management changes in the season
+data %>%
+  group_by(countmanagchange) %>%
+  summarise(n_distinct(team, season))
+
+# *********************************************************************-
+#   BALANCED PANEL
+# *********************************************************************-
+
+# define intervention as management change
+# at least 12 games before (since season started or previous management changed)
+# at least 12 games after (till season ends or next management change)
+data_aux <- data %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(max_gameno = max(gameno)) %>%
+  filter(managchange == 1) %>%
+  mutate(gamesbefore = ifelse(is.na(dplyr::lag(gameno)), gameno - 1, gameno - dplyr::lag(gameno)),
+         gamesafter = ifelse(is.na(dplyr::lead(gameno)), max_gameno - gameno, dplyr::lead(gameno) - gameno)) %>%
+  mutate(intervention = ifelse(gamesbefore<12 | gamesafter<12, 0, managchange)) %>%
+  select(team, season, date, intervention) %>%
+  ungroup()
+
+data_balanced <- left_join(data, data_aux) %>%
+  mutate(intervention = replace_na(intervention, 0)) %>%
+  group_by(team, season) %>%
+  mutate(countinterv = sum(intervention, na.rm = TRUE)) %>%
+  mutate(intervention_time = min(ifelse(intervention == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_event = ifelse(is.infinite(intervention_time), NA, gameno - intervention_time)) %>%
+  mutate(t_event = ifelse(t_event>=0 & t_event<=38, t_event+1, t_event)) %>% # Intervention event study time (to -1 before, from +1 after)
+  ungroup() %>%
+  filter((countinterv==1 & t_event>=-12 & t_event<=12) | countmanagchange==0)
+
+data_balanced %>%
+  group_by(countinterv) %>%
+  summarise(n_distinct(team, season))
+
+# figure: average number interventions by game number
+p3<- ggplot(data = data_balanced, aes(x = gameno, y = intervention)) +
+  geom_col(fill = color[1], size = 0.25, alpha = 0.8,  show.legend=F, na.rm =TRUE) +
+  labs(y = "Number of manager changes", x = "Game number") +
+  scale_y_continuous(expand=c(0.0,0.0), breaks = seq(1, 6, by = 1), limits = c(0, 6)) +
+  scale_x_continuous(expand=c(0.01,0.01), breaks = seq(0, 38, 4), limits = c(0, 38)) +
+  background_grid(major = "none", minor = "none")+
+  theme_bg()
+p3
+save_fig("ch24-figure-3-football-managchanges", output, "large")
+
+# figure: average points by event time
+p4<-getPointsGraph(data_balanced, colors = color, num=12)
+p4
+save_fig("ch24-figure-4-football-manager-points1", output, "large")
+
+# *********************************************************************-
+#   * CREATE CONTORL GROUP WITH PSEUDO-INTERVENTIONS
+# *********************************************************************-
+# for each game, define avg diff of points 12-7 before
+# dip: avg diff of points 6-1 before minus 12-7 before
+data_balanced <- data_balanced %>%
+  arrange(team, season, date) %>%
+  group_by(team, season) %>%
+  mutate(points_b_7_12 = dplyr::lag(points, 12) + dplyr::lag(points, 11) + dplyr::lag(points, 10) +
+           dplyr::lag(points, 9) + dplyr::lag(points, 8) + dplyr::lag(points, 7),
+         points_b_1_6 = dplyr::lag(points, 6) + dplyr::lag(points, 5) + dplyr::lag(points, 4) +
+           dplyr::lag(points, 3) + dplyr::lag(points, 2) + dplyr::lag(points, 1)) %>%
+  mutate(dip = points_b_1_6/6 - points_b_7_12/6,
+         points_b_1= dplyr::lag(points)) %>%
+  ungroup()
+
+# summary stats of dip when intervention
+data_balanced %>%
+  filter(intervention == 1) %>%
+  select(points_b_1_6, points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# set ranges to define control group
+points_b_7_12min = 4
+points_b_7_12max = 8
+dipmin = -0.8
+dipmax = -0.2
+points_b_1min = 0
+points_b_1max = 1
+
+# define pseudo-intervention
+data_balanced <- data_balanced %>%
+  mutate(pseudo = as.numeric(countmanagchange==0 & dip>=dipmin & dip<=dipmax
+                             & points_b_7_12>=points_b_7_12min & points_b_7_12<=points_b_7_12max
+                             & points_b_1>=points_b_1min & points_b_1<=points_b_1max
+                             & gameno < (38-12) # games with 12 left in the season
+  ))
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+# if more such games in a teamXseason, choose one randomly
+
+# Note: In the textbook (2021 edition) we say  "When there was more than one candidate game within the same season for the same team, we selected the first one in the season."
+# In fact we mean "..., we selected **one in the season randomly**."
+
+data_balanced <- chooseRandomPseudo(data_balanced)
+
+table(data_balanced$pseudo, useNA = "always")
+data_balanced %>%
+  filter(pseudo == 1) %>%
+  select(points_b_7_12, dip, points_b_1) %>%
+  summary()
+
+data_balanced <- data_balanced %>%
+  group_by(team, season) %>%
+  mutate(countpseudo = sum(pseudo, na.rm = TRUE)) %>%
+  mutate(pseudo_time = min(ifelse(pseudo == 1, gameno, NA), na.rm = TRUE)) %>%
+  mutate(t_pseudo = ifelse(is.infinite(pseudo_time), NA, gameno - pseudo_time)) %>%
+  mutate(t_pseudo = ifelse(t_pseudo>=0 & t_pseudo<=38, t_pseudo+1, t_pseudo)) %>%
+  mutate(t_event = ifelse(is.na(t_event), t_pseudo, t_event)) %>%
+  ungroup() %>%
+  filter(t_event>=-12 & t_event<=12)
+
+table(data_balanced$intervention, data_balanced$pseudo)
+data_balanced %>%
+  group_by(countinterv, countpseudo) %>%
+  summarise(n_distinct(team, season))
+
+# FIGURE with intervention and pseudo-intervention averages
+p5<-getPointsGraphWithPseudo(data_balanced, colors = color,num=12)
+p5
+save_fig("abra_ger_ugye", output, "large")
+
+# ******************************************************************
+# REGRESSION with 6-game averages
+data_balanced_agg <- data_balanced %>%
+  mutate(teamseason = factor(paste0(team, season))) %>%
+  group_by(teamseason, t6_event = droplevels(cut(t_event, c(-13,-6,0, 1,7,13), right = FALSE))) %>%
+  summarise(treated = mean(countinterv), 
+            points6avg = round(mean(points), 6), 
+            season_year = mean(season) + 2000,
+            manager_quality = mean(mean_points_for_manager),
+            team = team,
+            league = league) %>%
+  arrange(teamseason, t6_event) %>%
+  distinct() %>% 
+  group_by(teamseason) %>%
+  mutate(Dp6avg = points6avg - dplyr::lag(points6avg)) %>%
+  ungroup()
+
+
+data_balanced_agg <- cbind(data_balanced_agg,
+                           sapply(levels(data_balanced_agg$t6_event),
+                                  function(x) as.integer(x == data_balanced_agg$t6_event)))
+
+colnames(data_balanced_agg)[10:13] <- c("before_7_12", "before_1_6", "after_1_6", "after_7_12")
+
+data_balanced_agg <- data_balanced_agg %>% mutate(after_1_6_treat = after_1_6 * treated,
+                                                  after_7_12_treat = after_7_12 * treated)
+
+data_balanced_agg %>%
+  select(Dp6avg, after_1_6, after_7_12) %>%
+  summary()
+
+# FD REGRESSIONS
+fd_treatment <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                   data = filter(data_balanced_agg, treated == 1))
+fd_control <- lm(Dp6avg ~ after_1_6 + after_7_12, 
+                 data = filter(data_balanced_agg, treated == 0))
+fd_ger_for_final <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + I(treated*after_1_6) + I(treated*after_7_12),
+                       data = data_balanced_agg)
+
+summary(fd_treatment)
+summary(fd_control)
+summary(fd)
+
+stargazer_r(list(fd_treatment, fd_control, fd_ger_for_final), se = 'robust',
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/csak_ger_ugye_final.html"
+)
+
+stargazer_r(list(fd_treatment, fd_control, fd_ger_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################################
+###################################
+###################################
+################################### EGYÜTT
+###################################
+###################################
+###################################
+
+
+
+
+
+
+
+
+
+
+
+
+########## Mindet egy táblába
+
+stargazer_r(list(fd_eng_for_final, fd_spa_for_final, fd_ita_for_final, fd_ger_for_final,fd_fra_for_final), se = 'robust',
+            type = "text",
+            #out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/jonaktunik_ger.html"
+)
+
+#### trad vs robust standard errors
+stargazer_r(list(fd_eng_for_final, fd_spa_for_final, fd_ita_for_final, fd_ger_for_final,fd_fra_for_final), se = 'traditional',
+            float=T, digits=3, 
+            column.labels   = c("Premier League", "La liga", "Serie A", "Bundesliga", "Ligue 1"),
+            model.numbers          = FALSE,
+            covariate.labels = c("1-6 utána", "7-12 utána", "kezelt",
+                                 "kezelt, 1-6 utána ", "kezelt, 7-12 utána ", "konstans"),
+            dep.var.caption  = "<em>Függő változó</em>",
+            dep.var.labels   = "A 6 meccses átlagpontok elsőfokú differenciája",
+            type = "html",
+            out="C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/eng_spa_ita_ger_fra_traditional_se_final.html_magic.html")
+            
+
+summary(fd_eng_for_final)
+summary(fd_spa_for_final)
+summary(fd_ita_for_final)
+stargazer_r(fd_ger_for_final, se = 'traditional', type = "text")
+summary(fd_fra_for_final)
+
+
+
+
+##################### Ez csak németországra
+
+
+fd_ger <- lm(Dp6avg ~ after_1_6 + after_7_12 + treated + after_1_6_treat + after_7_12_treat,
+         data = data_balanced_agg)
+
+
+fd_clustered_sd_ger <- lm_robust(Dp6avg ~ after_1_6 + after_7_12 + treated + after_1_6_treat + after_7_12_treat,
+                            data = data_balanced_agg,
+                            se_type = "stata", 
+                            clusters = team)
+
+fd_clustered_sd_with_y_ger <- lm_robust(Dp6avg ~ after_1_6 + after_7_12 + treated + after_1_6_treat + after_7_12_treat 
+                                    + season_year,
+                                    data = data_balanced_agg,
+                                    se_type = "stata", 
+                                    clusters = team)
+
+fd_clustered_sd_with_y_c_ger <- lm_robust(Dp6avg ~ after_1_6 + after_7_12 + treated + after_1_6_treat + after_7_12_treat 
+                                      + season_year + manager_quality,
+                                      data = data_balanced_agg,
+                                      se_type = "stata", 
+                                      clusters = team)
+
+
+
+tab5<-huxreg('1. modell' = fd_ger, 
+             '2. modell' = fd_clustered_sd_ger,
+             '3. modell' = fd_clustered_sd_with_y_ger, 
+             '4. modell' = fd_clustered_sd_with_y_c_ger,
+             stars = c(`***` = 0.01, `**` = 0.05, `*` = 0.10),
+             statistics = c(`Megfigyelések száma` = "nobs", `R^2` = "r.squared"), 
+             #omit_coefs = c(paste("year", levels(data_balanced$year), sep= ""), paste("c", levels(data_balanced$c), sep= "")),
+             coefs = c("Rövidtávú kezelési hatás" = "after_1_6_treat",
+                       "Hosszútávú kezelési hatás" = "after_7_12_treat")
+)
+jo_kis_tabla <- tab5 %>%
+  insert_row(c("Klaszterezett standard hibák", "Nem", "Igen", "Igen", "Igen"), after = 5) %>%
+  insert_row(c("Szezon dummy-k", "Nem", "Nem", "Igen", "Igen"), after = 6) %>%
+  insert_row(c("Menedzseri minőség kontrollal", "Nem", "Nem", "Nem", "Igen"), after = 7)
+
+
+quick_html(jo_kis_tabla, file = "C:/Rajk - újgép/Szakdolgozat Közgáz Elemző/final_regression_outputs/lepcsos_near_final_ger_ugye_final_magic.html")
+```
